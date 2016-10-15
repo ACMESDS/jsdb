@@ -1,0 +1,15 @@
+{
+  "name": "dsvar",
+  "version": "1.0.0",
+  "description": "provide database agnostic JS dataset var interface",
+  "main": "dsvar.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@git.geointapps.org/acmesds:dsvar"
+  },
+  "author": "acme",
+  "license": "ISC"
+}
