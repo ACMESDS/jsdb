@@ -40,15 +40,15 @@ or in record-locked mode using:
 
 Dataset ATTRIBUTES = { key: value, ... } include:
 
-	table: 	"DB.TABLE" || "TABLE"
-	where: 	[ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
+	table: 	DB.TABLE || TABLE
+	where: 	[ FIELD, FIELD, ... ] | {CLAUSE:null, nlp:PATTERN, bin:PATTERN, qex:PATTERN, has:PATTERN, like:PATTERN, FIELD:VALUE, FIELD:[MIN,MAX], ...} | CLAUSE
 	res: 	function (ds) {...}
 
-	having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
+	having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} | CLAUSE
 	order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
 	group: 	[ FIELD, ...] | "FIELD, ..."
 	limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
-	index:	[ FIELD, ... ] | "FIELD, ... " | { nlp:PATTERN, bin:PATTERN, qex: PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
+	index:	[ FIELD, ... ] | "FIELD, ... " | { nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
 
 	unsafeok: 	[true] | false 		to allow/block potentially unsafe CLAUSE queries
 	trace: [true] | false				to display formed queries
@@ -63,17 +63,39 @@ and limited by .limit ATTRIBUTEs.  Select will search for PATTERN
 using its index.nlp (natural language parse), index.bin (binary mode), index.qex (query expansion), 
 or group recording according to its index.browse (file navigation) or index.pivot (joint statistics).
 
+Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
+was configured), and willjournal the change when jounalling is enabled.
+
 ## Examples
 
 Require and config DSVAR:
 
-	var DSVAR = require("dsvar").config({ ... });
+	var DSVAR = require("dsvar").config({ 
 	
-There is nothing to configure if the default MySQL-Cluster support suffices.  
+		dbtx: {		// table translator
+			X: "DB.Y", ...
+		},
+		
+		emit:  (crude,parms) => {  // method to bradcast changes to other socket.io clients
+		}, 
+		
+		mysql : {	// 	database connection parms
+			host: ...
+			user: ...
+			pass: ...
+		}
+	
+	});
+	
+The .DS and .thread options can be overridden if the default MySQL-Cluster support does not suffice.
 
-Create dataset on an existing sql thread
+Create dataset on a new sql thread
 
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,rec:res});
+	DSVAR.thread( function (sql) {
+	
+		var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,rec:res});
+		
+	});
 
 Create dataset and access each record
 
@@ -109,12 +131,12 @@ Update ds record(s) matched by ds.where
 	
 ## Installation
 
-Download and unzip into your project/totem folder and revise the project/config module as needed
-for your [Totem](https://git.geointapps.org/acmesds/transfer) project.  Typically, you will
-want to point the following back to your project/config
+Download the latest version with
 
-	ln -s project/config/maint.sh maint.sh
+	git clone https://git.geointapps.org/acmesds/dsvar
 	
+See [Totem downloads](https://git.geointapps.org/acmesds/download) for optional Totem plugins.
+
 ## License
 
 [MIT](LICENSE)

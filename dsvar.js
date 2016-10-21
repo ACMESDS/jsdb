@@ -1,4 +1,4 @@
-// UNCLASSIFIED 
+// UNCLASSIFIED >>>>
 
 /**
  * @module DSVAR
@@ -75,10 +75,17 @@ var												// 3rd party bindings
 
 var 											// totem bindings
 	ENUM = require("enum").extend({
+		String: [
+			function Escape() {
+				var q = "`";
+				return q + escape(this) + q;
+			}
+		],
+				
 		Array: [
-			function escape() {
-				var q = "`";				
-				return q+this.join(`${q},${q}`)+q;
+			function Escape(slash) {
+				var q = "`";
+				return  q + this.join(slash ? `${q},'${slash}',${q}` : `${q},${q}`) + q;
 			}
 		]
 	}),
@@ -103,11 +110,7 @@ var
 		errors: {
 			unsafeQuery: new Error("unsafe queries not allowed"),
 			unsupportedQuery: new Error("query not supported"),
-			invalidQuery: new Error("query invalid"),
-			disableEngine: new Error("requested engine must be disabled to prime"),
-			noEngine: new Error("requested engine does not exist"),
-			missingEngine: new Error("missing engine query"),
-			protectedQueue: new Error("action not allowed on this job queues")
+			invalidQuery: new Error("query invalid")
 		},
 		
 		dbtx: {},
@@ -231,14 +234,15 @@ DSVAR.DS.prototype = {
 		
 		var me = this,
 			keys = key.split(" "),
-			ag = keys[1] || "least(?,1)";
+			ag = keys[1] || "least(?,1)",
+			type = opt ? opt.constructor : null;
 			
-		if (opt) 
+		if (type) 
 			switch (keys[0]) {
 
 				case "BROWSE":
 
-					var	slash = "_", //quote = "`",
+					var	slash = "_", 
 						where = me.where,
 						nodeID = where.NodeID,
 						nodes = nodeID ? nodeID.split(slash) : [],
@@ -249,8 +253,7 @@ DSVAR.DS.prototype = {
 						: pivots.slice(0,nodes.length+1);
 
 					var name = pivots[nodes.length] || "concat('ID',ID)";
-					var path = me.group.escape();
-						//quote + me.group.join(`${quote},'${slash}',${quote}`) + quote;
+					var path = me.group.Escape(slash);
 
 					me.query += `, cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
 							+ ", count(ID) AS NodeCount "
@@ -291,7 +294,7 @@ DSVAR.DS.prototype = {
 				
 				case "SELECT":
 
-					switch (opt.constructor) {
+					switch (type) {
 						case Array:
 							me.query += ` ${key} ??`;
 							me.opts.push(opt);
@@ -324,7 +327,7 @@ DSVAR.DS.prototype = {
 					break;
 
 				case "JOIN":
-					switch (opt.constructor) {
+					switch (type) {
 						case Array:
 							me.query += ` ${mode} ${key} ON ?`;
 							me.opts.push(opt);
@@ -350,7 +353,7 @@ DSVAR.DS.prototype = {
 					break;
 				
 				case "LIMIT":
-					switch (opt.constructor) {
+					switch (type) {
 						case Array:
 							me.query += ` ${key} ?`;
 							me.opts.push(opt);
@@ -373,33 +376,11 @@ DSVAR.DS.prototype = {
 
 					me.nowhere = false;
 					
-					switch (opt.constructor) {
+					switch (type) {
 						case Array:
 							
-							switch (opt.length) {
-								case 0:
-									break;
-								
-								case 1:
-									me.query += ` ${key} ?? IS NULL`;
-									me.opts.push( opt[0] );
-									break;
-									
-								case 2:
-									me.query += ` ${key} ?? LIKE '${opt[1]}'`;
-									me.opts.push( opt[0] );
-									break;
-									
-								case 3:
-									me.query += ` ${key} ?? BETWEEN ? AND ?`;
-									me.opts.push( opt[0] );
-									me.opts.push( opt[1] );
-									me.opts.push( opt[2] );
-									break;
-									
-								default:
-							}
-							
+							me.query += ` ${key} ??`;
+							me.opts.push(opt);
 							break;
 							
 						case String:
@@ -410,19 +391,59 @@ DSVAR.DS.prototype = {
 
 						case Object:
 							var rels = []; 
-							for (var n in opt) {
-								if (opt[n] == null) {		// using unsafe expression query (e.g. &x<10)
+							
+							for (var n in opt) { 			// recast and remove unsafes
+								var test = opt[n];
+								
+								if (test == null) {		// using unsafe expression query (e.g. &x<10)
 									me.safe = false;
 									rels.push(n);
 									delete opt[n];
 								}
-								else 						// using unsafe range query (e.g. &x=[min,max])
-								if ( (args = (opt[n]+"").split(",")).length>1 ) {
-									me.safe = false;
-									rels.push(sql.escapeId(n) + " BETWEEN " + args[0] + " AND " + args[1] );
-									delete opt[n];
-								}
-								// otherwise using safe query (e.g &x=value)
+								else 
+									switch (test.constructor) {
+										case Array:   // using range query e.g. x=[min,max]
+
+											delete opt[n];
+											switch (test.length) {
+												case 0:
+													rels.push( n.Escape() +" IS null" );
+													break;
+
+												case 2:
+													rels.push(n.Escape() + " BETWEEN " + test[0] + " AND " + test[1] );
+													break;
+
+												default:
+											}
+											break;
+											
+										case Object:  // using search query e.g. x={nlp:pattern}
+											
+											var ne = n.Escape();
+											if (test.nlp) 
+												rels.push( `MATCH(${ne}) AGAINST('${test.nlp}')` );
+											else
+											if (test.bin)
+												rels.push( `MATCH(${ne}) AGAINST('${test.bin}') IN BINARY MODE` );
+											else
+											if (test.qex)
+												rels.push( `MATCH(${ne}) AGAINST('${test.qex}') WITH QUERY EXPANSION` );
+											else
+											if (test.has)
+												rels.push( `INSTR(${ne}, '${test.has}')` );
+											else
+											if (test.like)
+												rels.push( `${ne} LIKE '${test.like}'` );
+											else
+												break;
+												
+											delete opt[n];
+											break;
+											
+										case String:   // otherwise using safe query e.g x=value
+										default:
+									}
 							}
 							
 							for (var n in opt) { 			// aggregate where clause using least,sum,etc
@@ -446,7 +467,7 @@ DSVAR.DS.prototype = {
 					break;
 					
 				case "ORDER":
-					switch (opt.constructor) {
+					switch (type) {
 						case Array:
 							var by = [];
 							opt.each(function (n,opt) {
@@ -471,7 +492,7 @@ DSVAR.DS.prototype = {
 					
 				case "SET":
 					
-					switch (opt.constructor) {
+					switch (type) {
 						/*case Array:
 							me.safe = false;
 							me.query += ` ${key} ??`;
@@ -495,7 +516,7 @@ DSVAR.DS.prototype = {
 					break;
 					
 				default:
-					switch (opt.constructor) {
+					switch (type) {
 						case Array:
 							me.query += ` ${key} ??`;
 							me.opts.push(opt);
