@@ -34,32 +34,36 @@ query can also be performed using:
 	ds.data = [ ... ]
 	ds.rec = CRUDE
 
-or in record-locked mode using:
+or in record-locked mode (as reflected to the **openv.lock** table) using:
 
 	ds.rec = "lock." + CRUDE
 
 Dataset ATTRIBUTES = { key: value, ... } include:
 
 	table: 	DB.TABLE || TABLE
-	where: 	[ FIELD, FIELD, ... ] | {CLAUSE:null, nlp:PATTERN, bin:PATTERN, qex:PATTERN, has:PATTERN, like:PATTERN, FIELD:VALUE, FIELD:[MIN,MAX], ...} | CLAUSE
+	where: 	[ FIELD, FIELD, ... ] | { CLAUSE:null, nlp:PATTERN, bin:PATTERN, qex:PATTERN, has:PATTERN, like:PATTERN, FIELD:VALUE, FIELD:[MIN,MAX], ...} | CLAUSE
 	res: 	function (ds) {...}
 
 	having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} | CLAUSE
 	order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
 	group: 	[ FIELD, ...] | "FIELD, ..."
 	limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
-	index:	[ FIELD, ... ] | "FIELD, ... " | { nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
+	index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
+
+as well as derived ATTRIBUTES (derived from the **openv.roles** table at startup):
 
 	unsafeok: 	[true] | false 		to allow/block potentially unsafe CLAUSE queries
 	trace: [true] | false				to display formed queries
 	journal: true | [false] 			enable table journalling
+	search: "field,field,..." 			full search fields
 	ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
+	tx: "db.table" 						table translator
 
-Null attributes are ignored.   
+Attributes will null keys are always ignored.
 
 The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
 by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
-and limited by .limit ATTRIBUTEs.  Select will search for PATTERN 
+and limited by .limit ATTRIBUTES.  Select will search for PATTERN 
 using its index.nlp (natural language parse), index.bin (binary mode), index.qex (query expansion), 
 or group recording according to its index.browse (file navigation) or index.pivot (joint statistics).
 
@@ -84,7 +88,7 @@ Require and config DSVAR:
 			user: ...
 			pass: ...
 		}
-	
+
 	});
 	
 The .DS and .thread options can be overridden if the default MySQL-Cluster support does not suffice.

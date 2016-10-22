@@ -1,4 +1,4 @@
-// UNCLASSIFIED >>>>
+// UNCLASSIFIED ++++
 
 /**
  * @module DSVAR
@@ -51,11 +51,14 @@
 		order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
 		group: 	[ FIELD, ...] | "FIELD, ..."
 		limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
-		index:	[ FIELD, ... ] | "FIELD, ... " | { nlp:PATTERN, bin:PATTERN, qex: PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
+		index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex: PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
 
+	and those derived from the sql openv.roles table:
+	
 		unsafeok: 	[true] | false 		to allow/block potentially unsafe CLAUSE queries
 		trace: [true] | false				to display formed queries
 		journal: true | [false] 			enable table journalling
+		tx: "db.table" 						table translator
 		ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
 
 	Null attributes are ignored.   
@@ -113,7 +116,7 @@ var
 			invalidQuery: new Error("query invalid")
 		},
 		
-		dbtx: {},
+		roles: {},
 		
 		config: function (opts) {
 			
@@ -133,8 +136,44 @@ var
 							}
 						]);
 
+						var Roles = DSVAR.roles;
+						sql.query("SELECT * FROM openv.roles", function (err,roles) {
+							roles.each(function (n,role) {
+								var Role = Roles[role.Table] = {
+									search: [],
+									journal: role.Journal,
+									tx: role.Tx,
+									flatten: role.Flatten,
+									doc: role.Special,
+									unsafeok: role.Unsafeok,
+									trace: role.Trace
+								};
+							});
+							
+							sql.query("SHOW TABLES FROM app1", function (err,tables) {
+								tables.each(function (n,table) {
+									var tab = table.Tables_in_app1,
+										Role = Roles[tab];
+									
+									sql.query("SHOW KEYS FROM app1."+tab, function (err,keys) {
+	
+										var search = [];
+										keys.each( function (n,key) {
+											if (key.Index_type == "FULLTEXT")
+												search.push(key.Column_name);
+										});
+										
+										if (search.length) {
+											if (!Role) Role = Roles[tab] = {trace:true,unsafeok:false,journal:false,doc:""};
+											Role.search = search.Escape();
+										}
+									});
+								});
+							});		
+						});
+						
 						sql.release();
-					});			
+					});	
 			}
 			
 			return DSVAR;
@@ -208,18 +247,21 @@ var
 			this.opts = null;
 			this.unsafeok = true;
 			this.trace = true;
+			this.journal = false;
+			this.ag = "";
 
-			for (var n in defs) 
+			var def = DSVAR.roles[atts.table] || defs || {};
+
+			for (var n in def)
 				switch (n) {
 					case "select":
 					case "update":
 					case "delete":
 					case "insert":
-						this.prototype[n] = defs[n];
+						this.prototype[n] = def[n];
 						break;
-
 					default:	
-						this[n] = defs[n];
+						this[n] = def[n];
 				}
 
 			if (atts.constructor == String) atts = {table:atts};
@@ -288,10 +330,20 @@ DSVAR.DS.prototype = {
 				case "IN":
 				case "WITH":
 				
-					me.query += `,MATCH(FullSearch) AGAINST('${opt}' ${key}) AS Score`;
-					me.having = me.score ? "Score>"+me.score : "Score";
+					if (me.search) {
+						me.query += `,MATCH(${me.search}) AGAINST('${opt}' ${key}) AS Score`;
+						me.having = me.score ? "Score>"+me.score : ["Score"];
+					}
 					break;
 				
+				case "HAS":
+				
+					if (me.search) {
+						me.query += `,instr(concat(${me.search}),'${opt}') AS Score`;
+						me.having = me.score ? "Score>"+me.score : ["Score"];
+					}
+					break;
+
 				case "SELECT":
 
 					switch (type) {
@@ -318,12 +370,12 @@ DSVAR.DS.prototype = {
 								me.x(opt.nlp, "");
 								me.x(opt.bin, "IN BINARY MODE");
 								me.x(opt.qex, "WITH QUERY EXPANSION");
+								me.x(opt.has,"HAS");
 								me.x(opt.browse, "BROWSE");
 								me.x(opt.pivot, "PIVOT");
 							}
 							break;
-					}					
-
+					}	
 					break;
 
 				case "JOIN":
@@ -375,7 +427,7 @@ DSVAR.DS.prototype = {
 				case "HAVING":
 
 					me.nowhere = false;
-					
+
 					switch (type) {
 						case Array:
 							
@@ -420,21 +472,21 @@ DSVAR.DS.prototype = {
 											
 										case Object:  // using search query e.g. x={nlp:pattern}
 											
-											var ne = n.Escape();
-											if (test.nlp) 
-												rels.push( `MATCH(${ne}) AGAINST('${test.nlp}')` );
+											var fld = n.Escape();
+											if (pat = test.nlp) 
+												rels.push( `MATCH(${fld}) AGAINST('${pat}')` );
 											else
-											if (test.bin)
-												rels.push( `MATCH(${ne}) AGAINST('${test.bin}') IN BINARY MODE` );
+											if (pat = test.bin)
+												rels.push( `MATCH(${fld}) AGAINST('${pat}') IN BINARY MODE` );
 											else
-											if (test.qex)
-												rels.push( `MATCH(${ne}) AGAINST('${test.qex}') WITH QUERY EXPANSION` );
+											if (pat = test.qex)
+												rels.push( `MATCH(${fld}) AGAINST('${pat}') WITH QUERY EXPANSION` );
 											else
-											if (test.has)
-												rels.push( `INSTR(${ne}, '${test.has}')` );
+											if (pat = test.has)
+												rels.push( `INSTR(${fld}, '${pat}')` );
 											else
-											if (test.like)
-												rels.push( `${ne} LIKE '${test.like}'` );
+											if (pat = test.like)
+												rels.push( `${fld} LIKE '${pat}'` );
 											else
 												break;
 												
@@ -491,7 +543,6 @@ DSVAR.DS.prototype = {
 					break;
 					
 				case "SET":
-					
 					switch (type) {
 						/*case Array:
 							me.safe = false;
@@ -539,7 +590,7 @@ DSVAR.DS.prototype = {
 	update: function (req,res) { // update record(s) in dataset
 		
 		var	me = this,
-			table = DSVAR.dbtx[me.table] || me.table,
+			table = DSVAR.roles[me.table].tx || me.table,
 			ID = me.where.ID ,
 			client = me.client,
 			sql = me.sql,
@@ -559,7 +610,7 @@ DSVAR.DS.prototype = {
 			
 		me.x(table, "UPDATE");
 		me.x(req, "SET");
-		me.x(me.where, "WHERE "+(me.ag||""));
+		me.x(me.where, "WHERE "+me.ag);
 		me.x(me.order, "ORDER BY");
 		
 		if (me.nowhere)
@@ -597,7 +648,8 @@ DSVAR.DS.prototype = {
 	select: function (req,res) { // select record(s) from dataset
 
 		var	me = this,
-			table = DSVAR.dbtx[me.table] || me.table,
+			role = DSVAR.roles[me.table] || {},
+			table = role.tx || me.table,
 			client = me.client,
 			sql = me.sql;
 		
@@ -606,8 +658,8 @@ DSVAR.DS.prototype = {
 		me.x(me.index || "*", "SELECT SQL_CALC_FOUND_ROWS");
 		me.x(table, "FROM");
 		me.x(me.join, "JOIN", {});
-		me.x(me.where, "WHERE "+(me.ag||""));
-		me.x(me.having, "HAVING "+(me.ag||""));
+		me.x(me.where, "WHERE "+me.ag);
+		me.x(me.having, "HAVING "+me.ag);
 		me.x(me.order, "ORDER BY");
 		me.x(me.group, "GROUP BY");
 		me.x(me.limit, "LIMIT");
@@ -661,7 +713,7 @@ DSVAR.DS.prototype = {
 	delete: function (req,res) {  // delete record(s) from dataset
 		
 		var	me = this,
-			table = DSVAR.dbtx[me.table] || me.table,
+			table = DSVAR.roles[me.table].tx || me.table,
 			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql,
@@ -680,7 +732,7 @@ DSVAR.DS.prototype = {
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
 		
 		me.x(table, "DELETE FROM");
-		me.x(me.where, "WHERE "+(me.ag||""));
+		me.x(me.where, "WHERE "+me.ag);
 		
 		if (me.nowhere)
 			res( DSVAR.errors.unsafeQuery );	
@@ -720,7 +772,7 @@ DSVAR.DS.prototype = {
 		}
 		
 		var	me = this,
-			table = DSVAR.dbtx[me.table] || me.table,
+			table = DSVAR.roles[me.table].tx || me.table,
 			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql,
