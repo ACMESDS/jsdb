@@ -1,14 +1,10 @@
 // UNCLASSIFIED
 
 /**
- * @module dsvar
- * nodejs:
+ * @class dsvar
  * @requires cluster
- * totem:
  * requires enum
- * 3rd party:
  * @requires mysql
- * @include README.md
  */
 
 var 											// nodejs

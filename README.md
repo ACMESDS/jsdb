@@ -1,8 +1,8 @@
+/**
+@class dsvar [![Forked from SourceForge](https://sourceforge.net)]
 # DSVAR
 
-[![Forked from SourceForge](https://sourceforge.net)]
-
-DSVAR is a database agnosticator providing a normalized JS dataset interface to a (default 
+The DSVAR NodeJS modules is a database agnosticator that provides a normalized JS dataset interface to a (default 
 MySQL-Cluster) database using:
 	
 	sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
@@ -148,3 +148,5 @@ Typically, you will want to redirect the following to your project/master
 ## License
 
 [MIT](LICENSE)
+
+*/
