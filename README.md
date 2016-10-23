@@ -2,7 +2,7 @@
 
 [![Forked from SourceForge](https://sourceforge.net)]
 
-DSVAR is a database agnosticaor providing a normalized JS dataset interface to a (default 
+DSVAR is a database agnosticator providing a normalized JS dataset interface to a (default 
 MySQL-Cluster) database using:
 	
 	sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
