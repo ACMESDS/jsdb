@@ -1,9 +1,9 @@
-# Totem DSVAR
+# DSVAR
 
 [![Forked from SourceForge](https://sourceforge.net)]
 
-[Totem](https://git.geointapps.org/acmesds/transfer)'s DSVAR is a database agnosticaor providing a normalized 
-JS dataset interface to a (default MySQL-Cluster) database using:
+DSVAR is a database agnosticaor providing a normalized JS dataset interface to a (default 
+MySQL-Cluster) database using:
 	
 	sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
 
@@ -52,12 +52,13 @@ Dataset ATTRIBUTES = { key: value, ... } include:
 
 as well as derived ATTRIBUTES (derived from the **openv.roles** table at startup):
 
-	unsafeok: 	[true] | false 		to allow/block potentially unsafe CLAUSE queries
-	trace: [true] | false				to display formed queries
+	unsafeok: 	[true] | false 		allow potentially unsafe queries
+	trace: [true] | false				trace queries
 	journal: true | [false] 			enable table journalling
-	search: "field,field,..." 			full search fields
+	search: "field,field,..." 			define fulltext search fields
+	track: true | [false] 				enable search tracking
 	ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
-	tx: "db.table" 						table translator
+	tx: "db.table" 						translate table
 
 Attributes will null keys are always ignored.
 
@@ -138,8 +139,11 @@ Update ds record(s) matched by ds.where
 Download the latest version with
 
 	git clone https://git.geointapps.org/acmesds/dsvar
-	
-See [Totem downloads](https://git.geointapps.org/acmesds/download) for optional Totem plugins.
+
+Typically, you will want to redirect the following to your project/master
+
+	ln -s ../master/test.js test.js
+	ln -s ../master/maint.sh maint.sh
 
 ## License
 

@@ -1,74 +1,15 @@
-// UNCLASSIFIED ++++
+// UNCLASSIFIED
 
 /**
- * @module DSVAR
+ * @module dsvar
  * nodejs:
  * @requires cluster
  * totem:
  * requires enum
  * 3rd party:
  * @requires mysql
+ * @include README.md
  */
-/**
-	DSVAR provides a normalized JS dataset interface to a (by default MySQL-Cluster) database using:
-	
-		sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
-		
-			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
-		
-		});
-				
-	where dsX are datasets and where sql in a mysql connector.  Or, a lone datasets can be created:
-	
-		var ds = require("dsvar").DS(sql, ATTRIBUTES);
-	
-	where ATTRIBUTES = {key:value, ... } are provided below.  In this way, dataset queries can be 
-	performed in a db-agnostic way using:
-	
-		ds.rec = { FIELD:VALUE, ... }				// update matched record(s) 
-		ds.rec = [ {...}, {...}, ... ]						// insert record(s)
-		ds.rec = null 										// delete matched record(s)
-		ds.rec = function CB(recs,me) {...}		// select matched record(s)
-		
-	with callback to its non-null response .res method when the query completes.  A CRUDE = 
-	"select" | "delete" | "update" | "insert" | "execute" query can also be performed using:
-	
-		ds.res = callback() { ... }
-		ds.data = [ ... ]
-		ds.rec = CRUDE
-		
-	or in record-locked mode using:
-	
-		ds.rec = "lock." + CRUDE
-	
-	ATTRIBUTES = { key: value, ... } include:
-	
-		table: 	"DB.TABLE" || "TABLE"
-		where: 	[ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
-		res: 	function (ds) {...}
-
-		having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, "CLAUSE":null, FIELD:[MIN,MAX], ...} | "CLAUSE"
-		order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
-		group: 	[ FIELD, ...] | "FIELD, ..."
-		limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
-		index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex: PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
-
-	and those derived from the sql openv.roles table:
-	
-		unsafeok: 	[true] | false 		to allow/block potentially unsafe CLAUSE queries
-		trace: [true] | false				to display formed queries
-		journal: true | [false] 			enable table journalling
-		tx: "db.table" 						table translator
-		ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
-
-	Null attributes are ignored.   
-	
-	The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
-	by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
-	and limited by .limit ATTRIBUTEs.  Select will use its .index ATTRIBUTE to search for PATTERN 
-	using nlp (natural language parse), bin (binary mode), or qex (query expansion), and can browse or 
-	pivot the dataset.
-*/
 
 var 											// nodejs
 	CLUSTER = require("cluster");
@@ -94,6 +35,11 @@ var 											// totem bindings
 	}),
 	Copy = ENUM.copy,
 	Each = ENUM.each;
+
+var 											// globals
+	DEFAULT = {
+		ROLE:	{trace:true,unsafeok:false,journal:false,doc:"",track:0}
+	};
 
 function Trace(msg,arg) {
 	
@@ -146,6 +92,7 @@ var
 									flatten: role.Flatten,
 									doc: role.Special,
 									unsafeok: role.Unsafeok,
+									track: role.Track,
 									trace: role.Trace
 								};
 							});
@@ -164,7 +111,7 @@ var
 										});
 										
 										if (search.length) {
-											if (!Role) Role = Roles[tab] = {trace:true,unsafeok:false,journal:false,doc:""};
+											if (!Role) Role = Roles[tab] = DEFAULT.ROLE;
 											Role.search = search.Escape();
 										}
 									});
@@ -333,6 +280,7 @@ DSVAR.DS.prototype = {
 					if (me.search) {
 						me.query += `,MATCH(${me.search}) AGAINST('${opt}' ${key}) AS Score`;
 						me.having = me.score ? "Score>"+me.score : ["Score"];
+						me.searching = opt;
 					}
 					break;
 				
@@ -341,6 +289,7 @@ DSVAR.DS.prototype = {
 					if (me.search) {
 						me.query += `,instr(concat(${me.search}),'${opt}') AS Score`;
 						me.having = me.score ? "Score>"+me.score : ["Score"];
+						me.searching = opt;
 					}
 					break;
 
@@ -673,7 +622,7 @@ DSVAR.DS.prototype = {
 					})						
 					.on("result", function (rec) {
 						req(rec,me);
-					}); 
+					});
 					break;
 				
 				case "clone": 
@@ -697,7 +646,19 @@ DSVAR.DS.prototype = {
 					
 				case "all":
 				default:  
-					Trace( sql.query(me.query, me.opts, function (err,recs) {	
+					Trace( sql.query(me.query, me.opts, function (err,recs) {
+						
+						if (me.track && me.searching && recs)
+							sql.query(
+								"INSERT INTO openv.tracks SET ? ON DUPLICATE KEY UPDATE Searched=Searched+1,Returned=Returned+?", [
+									{	Client: client,
+									 	Searching: me.searching,
+									 	Searched: 0,
+									 	Within: me.table,
+									 	Returned: recs.length
+									}, recs.length
+								]);
+									 
 						req( err || recs, me );
 					}) );
 			}
