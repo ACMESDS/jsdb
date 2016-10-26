@@ -58,7 +58,9 @@ var
 			invalidQuery: new Error("query invalid")
 		},
 		
-		roles: {},
+		attrs: {},
+		
+		moderators: {},
 		
 		config: function (opts) {
 			
@@ -78,25 +80,25 @@ var
 							}
 						]);
 
-						var Roles = DSVAR.roles;
-						sql.query("SELECT * FROM openv.roles", function (err,roles) {
-							roles.each(function (n,role) {
-								var Role = Roles[role.Table] = {
+						var Attrs  = DSVAR.attrs;
+						sql.query("SELECT * FROM openv.attrs", function (err,attrs) {
+							attrs.each(function (n,attr) {
+								var Attr = Attrs [attr.Dataset] = {
 									search: [],
-									journal: role.Journal,
-									tx: role.Tx,
-									flatten: role.Flatten,
-									doc: role.Special,
-									unsafeok: role.Unsafeok,
-									track: role.Track,
-									trace: role.Trace
+									journal: attr.Journal,
+									tx: attr.Tx,
+									flatten: attr.Flatten,
+									doc: attr.Special,
+									unsafeok: attr.Unsafeok,
+									track: attr.Track,
+									trace: attr.Trace
 								};
 							});
 							
 							sql.query("SHOW TABLES FROM app1", function (err,tables) {
 								tables.each(function (n,table) {
 									var tab = table.Tables_in_app1,
-										Role = Roles[tab];
+										Attr = Attrs [tab];
 									
 									sql.query("SHOW KEYS FROM app1."+tab, function (err,keys) {
 	
@@ -107,8 +109,8 @@ var
 										});
 										
 										if (search.length) {
-											if (!Role) Role = Roles[tab] = DEFAULT.ROLE;
-											Role.search = search.Escape();
+											if (!Attr) Attr = Attrs [tab] = DEFAULT.ROLE;
+											Attr.search = search.Escape();
 										}
 									});
 								});
@@ -190,10 +192,10 @@ var
 			this.opts = null;
 			this.unsafeok = true;
 			this.trace = true;
-			this.journal = false;
+			this.journal = true;
 			this.ag = "";
 
-			var def = DSVAR.roles[atts.table] || defs || {};
+			var def = DSVAR.attrs[atts.table] || defs || {};
 
 			for (var n in def)
 				switch (n) {
@@ -535,21 +537,10 @@ DSVAR.DS.prototype = {
 	update: function (req,res) { // update record(s) in dataset
 		
 		var	me = this,
-			table = DSVAR.roles[me.table].tx || me.table,
+			table = DSVAR.attrs[me.table].tx || me.table,
 			ID = me.where.ID ,
 			client = me.client,
-			sql = me.sql,
-			journal = me.journal 
-				? function (cb) {
-					sql.query( 						// attempt journal
-						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", [
-						"jou."+me.table.split(".").pop(), me.table, ID
-					])						
-					.on("end", cb);
-				}
-				: function (cb) {
-					cb();
-				};
+			sql = me.sql;
 		
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
 			
@@ -562,27 +553,36 @@ DSVAR.DS.prototype = {
 			res( DSVAR.errors.unsafeQuery );
 
 		else
-		if (me.safe || me.unsafeok)
-			journal( function () {
-				
-				sql.query(me.query, me.opts, function (err,info) {
+		if (me.safe || me.unsafeok) {
+			
+			if (me.journal) 
+				for (var mod in DSVAR.moderators)
+					for (var key in req)
+						sql.query(
+							`INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1`, {
+								Dataset: me.table,
+								Field: key,
+								Updates: 1,
+								Moderator: mod
+							});
+					
+			sql.query(me.query, me.opts, function (err,info) {
 
-					if (res) res( err || info );
+				if (res) res( err || info );
 
-					if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
-						DSVAR.emit( "update", {
-							table: me.table, 
-							body: req, 
-							ID: ID, 
-							from: client
-							//flag: flags.client
-						});
-
-				});
-
-				if (me.trace) Trace(me.query);
+				if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
+					DSVAR.emit( "update", {
+						table: me.table, 
+						body: req, 
+						ID: ID, 
+						from: client
+						//flag: flags.client
+					});
 
 			});
+
+			if (me.trace) Trace(me.query);
+		}
 		
 		else
 		if (res)
@@ -593,8 +593,8 @@ DSVAR.DS.prototype = {
 	select: function (req,res) { // select record(s) from dataset
 
 		var	me = this,
-			role = DSVAR.roles[me.table] || {},
-			table = role.tx || me.table,
+			attr = DSVAR.attrs[me.table] || {},
+			table = attr.tx || me.table,
 			client = me.client,
 			sql = me.sql;
 		
@@ -670,21 +670,10 @@ DSVAR.DS.prototype = {
 	delete: function (req,res) {  // delete record(s) from dataset
 		
 		var	me = this,
-			table = DSVAR.roles[me.table].tx || me.table,
+			table = DSVAR.attrs[me.table].tx || me.table,
 			ID = me.where.ID,
 			client = me.client,
-			sql = me.sql,
-			journal = me.journal 
-				? function (cb) {
-					sql.query( 						// attempt journal
-						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", [
-						"jou."+me.table.split(".").pop(), me.table, ID
-					])						
-					.on("end", cb);
-				}
-				: function (cb) {
-					cb();
-				};
+			sql = me.sql;
 		
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
 		
@@ -695,26 +684,23 @@ DSVAR.DS.prototype = {
 			res( DSVAR.errors.unsafeQuery );	
 		
 		else
-		if (me.safe || me.unsafeok)
-			journal( function () {
-			
-				me.sql.query(me.query, me.opts, function (err,info) {
+		if (me.safe || me.unsafeok) {
+			me.sql.query(me.query, me.opts, function (err,info) {
 
-					if (me.res) me.res(err || info);
-				
-					if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
-						DSVAR.emit( "delete", {
-							table: me.table, 
-							ID: ID, 
-							from: me.client
-							//flag: flags.client
-						});
-					
-				});
-					
-				if (me.trace) Trace(me.query);
-				
+				if (me.res) me.res(err || info);
+
+				if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
+					DSVAR.emit( "delete", {
+						table: me.table, 
+						ID: ID, 
+						from: me.client
+						//flag: flags.client
+					});
+
 			});
+
+			if (me.trace) Trace(me.query);
+		}
 	
 		else
 		if (res)
@@ -729,21 +715,10 @@ DSVAR.DS.prototype = {
 		}
 		
 		var	me = this,
-			table = DSVAR.roles[me.table].tx || me.table,
+			table = DSVAR.attrs[me.table].tx || me.table,
 			ID = me.where.ID,
 			client = me.client,
-			sql = me.sql,
-			journal = me.journal 
-				? function (cb) {
-					sql.query( 						// attempt journal
-						"INSERT INTO ?? SELECT *,ID AS j_ID,now() AS j_Event  FROM ?? WHERE ID=?", [
-						"jou."+me.table.split(".").pop(), me.table, ID
-					])						
-					.on("end", cb);
-				}
-				: function (cb) {
-					cb();
-				};
+			sql = me.sql;
 		
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true; 
 		
