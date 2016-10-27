@@ -34,7 +34,7 @@ var 											// totem bindings
 
 var 											// globals
 	DEFAULT = {
-		ROLE:	{trace:true,unsafeok:false,journal:false,doc:"",track:0}
+		ATTR:	{trace:true,unsafeok:false,journal:false,doc:"",track:0}
 	};
 
 function Trace(msg,arg) {
@@ -72,18 +72,17 @@ var
 				if (thread = DSVAR.thread)
 					thread( function (sql) {
 						ENUM.extend(sql.constructor, [
-							function context(ctx,cb) {
-								var sql = this;
-								var context = {};
-								for (var n in ctx) context[n] = new DSVAR.DS(sql,ctx[n],{table:n});
-								if (cb) cb(context);
-							}
+							eachTable,
+							context
 						]);
 
 						var Attrs  = DSVAR.attrs;
-						sql.query("SELECT * FROM openv.attrs", function (err,attrs) {
-							attrs.each(function (n,attr) {
-								var Attr = Attrs [attr.Dataset] = {
+						sql.query(  // Default DSVAR attrs then revise
+							"SELECT * FROM openv.attrs",
+							function (err,attrs) {
+							
+							attrs.each(function (n,attr) {  // defaults
+								var Attr = Attrs[attr.Dataset] = {
 									search: [],
 									journal: attr.Journal,
 									tx: attr.Tx,
@@ -95,6 +94,50 @@ var
 								};
 							});
 							
+							 // make fulltext fields searchable
+							
+							sql.eachTable({from:"app1"}, function (tab) { // get a table name
+								var Attr = Attrs[tab];
+
+								sql.query(			// get all keys for this table
+									"SHOW KEYS FROM app1."+tab, 
+									function (err,keys) { 
+
+									var search = [];
+									keys.each( function (n,key) {  // only fulltext  keys are searchable
+										if (key.Index_type == "FULLTEXT")
+											search.push(key.Column_name);
+									});
+
+									if (search.length) {
+										if (!Attr) Attr = Attrs[tab] = DEFAULT.ATTR;
+										Attr.search = search.Escape();
+									}
+									
+								});
+							});	
+							
+							// monitored datasets are to be journaled
+								
+							sql.query("SELECT Dataset FROM openv.monitors GROUP BY Dataset")
+							.on("result", function (mon) { 
+								Attrs[mon.Dataset].journal = 1;
+							});
+
+							// glean moderators from those monitoring
+								
+							sql.query(
+								"SELECT Role,Strength FROM openv.monitors GROUP BY Role", 
+								function (err, recs) {	
+									var mods = DSVAR.moderators;
+									recs.each( function (n, rec) {
+										mods[rec.Role] = rec.Strength;
+									});
+							});
+							
+							sql.release();
+							
+							/*
 							sql.query("SHOW TABLES FROM app1", function (err,tables) {
 								tables.each(function (n,table) {
 									var tab = table.Tables_in_app1,
@@ -115,9 +158,8 @@ var
 									});
 								});
 							});		
+						});*/
 						});
-						
-						sql.release();
 					});	
 			}
 			
@@ -892,3 +934,22 @@ DSVAR.DS.prototype = {
 	
 };
 
+function eachTable (opts,cb) {
+	var sql = this,
+		 key = `Tables_in_${opts.from}`;
+	
+	sql.query(
+		"SHOW TABLES "+(opts.from?"FROM "+opts.from:"")+(opts.where?" WHERE "+opts.where:""),
+		function (err,recs) {
+			recs.each( function (n,rec) {
+				cb(rec[key]);
+			});
+	});
+}
+						
+function context(ctx,cb) {
+	var sql = this;
+	var context = {};
+	for (var n in ctx) context[n] = new DSVAR.DS(sql, ctx[n], {table:n});
+	if (cb) cb(context);
+}
