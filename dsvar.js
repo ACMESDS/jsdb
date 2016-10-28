@@ -119,21 +119,21 @@ var
 							
 							// monitored datasets are to be journaled
 								
-							sql.query("SELECT Dataset FROM openv.monitors GROUP BY Dataset")
+							sql.query("SELECT Dataset FROM openv.hawks GROUP BY Dataset")
 							.on("result", function (mon) { 
 								Attrs[mon.Dataset].journal = 1;
 							});
 
 							// glean moderators from those monitoring
-								
+							/*
 							sql.query(
-								"SELECT Role,Strength FROM openv.monitors GROUP BY Role", 
+								"SELECT Role,Strength FROM openv.hawks GROUP BY Role", 
 								function (err, recs) {	
 									var mods = DSVAR.moderators;
 									recs.each( function (n, rec) {
 										mods[rec.Role] = rec.Strength;
 									});
-							});
+							});*/
 							
 							sql.release();
 							
@@ -578,6 +578,21 @@ DSVAR.DS.prototype = {
 	
 	update: function (req,res) { // update record(s) in dataset
 		
+		function hawk(log) {
+			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
+			.on("result", function (hawk) {
+				console.log(hawk);
+				sql.query(
+					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
+					Copy({
+						Hawk: hawk.Hawk,
+						Power: hawk.Power,
+						Updates: 1
+					}, log)
+				);
+			});
+		}
+		
 		var	me = this,
 			table = DSVAR.attrs[me.table].tx || me.table,
 			ID = me.where.ID ,
@@ -597,33 +612,30 @@ DSVAR.DS.prototype = {
 		else
 		if (me.safe || me.unsafeok) {
 			
-			if (me.journal) 
-				for (var mod in DSVAR.moderators)
-					for (var key in req)
-						sql.query(
-							`INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1`, {
-								Dataset: me.table,
-								Field: key,
-								Updates: 1,
-								Moderator: mod
-							});
-					
-			sql.query(me.query, me.opts, function (err,info) {
+			if (me.journal) {
+				hawk({Dataset:me.table, Field:""});
+				for (var key in req) {
+					hawk({Dataset:me.table, Field:key});
+					hawk({Dataset:"", Field:key});
+				}
 
-				if (res) res( err || info );
+				sql.query(me.query, me.opts, function (err,info) {
 
-				if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
-					DSVAR.emit( "update", {
-						table: me.table, 
-						body: req, 
-						ID: ID, 
-						from: client
-						//flag: flags.client
-					});
+					if (res) res( err || info );
 
-			});
+					if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
+						DSVAR.emit( "update", {
+							table: me.table, 
+							body: req, 
+							ID: ID, 
+							from: client
+							//flag: flags.client
+						});
 
-			if (me.trace) Trace(me.query);
+				});
+
+				if (me.trace) Trace(me.query);
+			}
 		}
 		
 		else
