@@ -34,7 +34,7 @@ var 											// totem bindings
 
 var 											// globals
 	DEFAULT = {
-		ATTR:	{trace:true,unsafeok:false,journal:false,doc:"",track:0}
+		ATTRS:	{tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0}
 	};
 
 function Trace(msg,arg) {
@@ -97,7 +97,7 @@ var
 							 // make fulltext fields searchable
 							
 							sql.eachTable({from:"app1"}, function (tab) { // get a table name
-								var Attr = Attrs[tab];
+								var Attr = Attrs[tab] || DEFAULT.ATTRS;
 
 								sql.query(			// get all keys for this table
 									"SHOW KEYS FROM app1."+tab, 
@@ -109,10 +109,8 @@ var
 											search.push(key.Column_name);
 									});
 
-									if (search.length) {
-										if (!Attr) Attr = Attrs[tab] = DEFAULT.ATTR;
+									if (search.length) 
 										Attr.search = search.Escape();
-									}
 									
 								});
 							});	
@@ -121,7 +119,8 @@ var
 								
 							sql.query("SELECT Dataset FROM openv.hawks GROUP BY Dataset")
 							.on("result", function (mon) { 
-								Attrs[mon.Dataset].journal = 1;
+								var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
+								Attr.journal = 1;
 							});
 
 							// glean moderators from those monitoring
@@ -368,6 +367,7 @@ DSVAR.DS.prototype = {
 					break;
 
 				case "JOIN":
+					
 					switch (type) {
 						case Array:
 							me.query += ` ${mode} ${key} ON ?`;
@@ -394,6 +394,7 @@ DSVAR.DS.prototype = {
 					break;
 				
 				case "LIMIT":
+					
 					switch (type) {
 						case Array:
 							me.query += ` ${key} ?`;
@@ -508,6 +509,7 @@ DSVAR.DS.prototype = {
 					break;
 					
 				case "ORDER":
+					
 					switch (type) {
 						case Array:
 							var by = [];
@@ -532,6 +534,7 @@ DSVAR.DS.prototype = {
 					break;
 					
 				case "SET":
+					
 					switch (type) {
 						/*case Array:
 							me.safe = false;
@@ -556,6 +559,7 @@ DSVAR.DS.prototype = {
 					break;
 					
 				default:
+					
 					switch (type) {
 						case Array:
 							me.query += ` ${key} ??`;
@@ -594,7 +598,8 @@ DSVAR.DS.prototype = {
 		}
 		
 		var	me = this,
-			table = DSVAR.attrs[me.table].tx || me.table,
+			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
+			table = attr.tx || me.table,
 			ID = me.where.ID ,
 			client = me.client,
 			sql = me.sql;
@@ -618,24 +623,24 @@ DSVAR.DS.prototype = {
 					hawk({Dataset:me.table, Field:key});
 					hawk({Dataset:"", Field:key});
 				}
-
-				sql.query(me.query, me.opts, function (err,info) {
-
-					if (res) res( err || info );
-
-					if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
-						DSVAR.emit( "update", {
-							table: me.table, 
-							body: req, 
-							ID: ID, 
-							from: client
-							//flag: flags.client
-						});
-
-				});
-
-				if (me.trace) Trace(me.query);
 			}
+			
+			sql.query(me.query, me.opts, function (err,info) {
+
+				if (res) res( err || info );
+
+				if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
+					DSVAR.emit( "update", {
+						table: me.table, 
+						body: req, 
+						ID: ID, 
+						from: client
+						//flag: flags.client
+					});
+
+			});
+
+			if (me.trace) Trace(me.query);
 		}
 		
 		else
@@ -647,7 +652,7 @@ DSVAR.DS.prototype = {
 	select: function (req,res) { // select record(s) from dataset
 
 		var	me = this,
-			attr = DSVAR.attrs[me.table] || {},
+			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
 			table = attr.tx || me.table,
 			client = me.client,
 			sql = me.sql;
@@ -724,7 +729,8 @@ DSVAR.DS.prototype = {
 	delete: function (req,res) {  // delete record(s) from dataset
 		
 		var	me = this,
-			table = DSVAR.attrs[me.table].tx || me.table,
+			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,			
+			table = attr.tx || me.table,
 			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql;
@@ -769,7 +775,8 @@ DSVAR.DS.prototype = {
 		}
 		
 		var	me = this,
-			table = DSVAR.attrs[me.table].tx || me.table,
+			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,			
+			table = attr.tx || me.table,
 			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql;
