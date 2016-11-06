@@ -52,15 +52,16 @@ function Trace(msg,arg) {
 var
 	DSVAR = module.exports = {
 		
-		errors: {
+		errors: {		//< errors messages
 			unsafeQuery: new Error("unsafe queries not allowed"),
 			unsupportedQuery: new Error("query not supported"),
 			invalidQuery: new Error("query invalid")
 		},
 		
-		attrs: {},
+		attrs: {		//< primed with mysql table attributes during config
+		},
 		
-		moderators: {},
+		//moderators: {},	//< legacy
 		
 		config: function (opts) {
 			
@@ -77,7 +78,7 @@ var
 						]);
 
 						var Attrs  = DSVAR.attrs;
-						sql.query(  // Default DSVAR attrs then revise
+						sql.query(  // Default haand revise table attributes
 							"SELECT * FROM openv.attrs",
 							function (err,attrs) {
 							
@@ -115,7 +116,7 @@ var
 								});
 							});	
 							
-							// monitored datasets are to be journaled
+							// journal all moderated datasets 
 								
 							sql.query("SELECT Dataset FROM openv.hawks GROUP BY Dataset")
 							.on("result", function (mon) { 
@@ -123,41 +124,7 @@ var
 								Attr.journal = 1;
 							});
 
-							// glean moderators from those monitoring
-							/*
-							sql.query(
-								"SELECT Role,Strength FROM openv.hawks GROUP BY Role", 
-								function (err, recs) {	
-									var mods = DSVAR.moderators;
-									recs.each( function (n, rec) {
-										mods[rec.Role] = rec.Strength;
-									});
-							});*/
-							
-							sql.release();
-							
-							/*
-							sql.query("SHOW TABLES FROM app1", function (err,tables) {
-								tables.each(function (n,table) {
-									var tab = table.Tables_in_app1,
-										Attr = Attrs [tab];
-									
-									sql.query("SHOW KEYS FROM app1."+tab, function (err,keys) {
-	
-										var search = [];
-										keys.each( function (n,key) {
-											if (key.Index_type == "FULLTEXT")
-												search.push(key.Column_name);
-										});
-										
-										if (search.length) {
-											if (!Attr) Attr = Attrs [tab] = DEFAULT.ROLE;
-											Attr.search = search.Escape();
-										}
-									});
-								});
-							});		
-						});*/
+							sql.release();  // begone with thee							
 						});
 					});	
 			}
@@ -165,9 +132,9 @@ var
 			return DSVAR;
 		},
 		
-		msql: null,
+		msql: null,  //< reserved for mysql connector
 		
-		emit: null,
+		io: null,		//< reserver for socketio
 		
 		thread: function (cb) {
 
@@ -585,7 +552,7 @@ DSVAR.DS.prototype = {
 		function hawk(log) {
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
-				console.log(hawk);
+//	console.log(hawk);
 				sql.query(
 					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
 					Copy({
@@ -629,8 +596,8 @@ DSVAR.DS.prototype = {
 
 				if (res) res( err || info );
 
-				if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
-					DSVAR.emit( "update", {
+				if (DSVAR.io.sockets.emit && ID && !err) 		// Notify clients of change.  
+					DSVAR.io.sockets.emit( "update", {
 						table: me.table, 
 						body: req, 
 						ID: ID, 
@@ -749,8 +716,8 @@ DSVAR.DS.prototype = {
 
 				if (me.res) me.res(err || info);
 
-				if (DSVAR.emit && ID && !err) 		// Notify clients of change.  
-					DSVAR.emit( "delete", {
+				if (DSVAR.io.sockets.emit && ID && !err) 		// Notify clients of change.  
+					DSVAR.io.sockets.emit( "delete", {
 						table: me.table, 
 						ID: ID, 
 						from: me.client
@@ -796,8 +763,8 @@ DSVAR.DS.prototype = {
 				if (!n && res) { 					// respond only to first insert
 					res( err || info );
 
-					if (DSVAR.emit && !err) 		// Notify clients of change.  
-						DSVAR.emit( "insert", {
+					if (DSVAR.io.sockets.emit && !err) 		// Notify clients of change.  
+						DSVAR.io.sockets.emit( "insert", {
 							table: me.table, 
 							body: rec, 
 							ID: info.insertId, 
