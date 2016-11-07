@@ -3,7 +3,7 @@
 /**
  * @class dsvar
  * @requires cluster
- * requires enum
+ * @requires enum
  * @requires mysql
  */
 
@@ -60,8 +60,6 @@ var
 		
 		attrs: {		//< primed with mysql table attributes during config
 		},
-		
-		//moderators: {},	//< legacy
 		
 		config: function (opts) {
 			
