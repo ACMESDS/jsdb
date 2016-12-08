@@ -50,7 +50,7 @@ Dataset ATTRIBUTES = { key: value, ... } include:
 	limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
 	index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
 
-as well as derived ATTRIBUTES (derived from the **openv.roles** table at startup):
+as well as:
 
 	unsafeok: 	[true] | false 		allow potentially unsafe queries
 	trace: [true] | false				trace queries
@@ -59,6 +59,8 @@ as well as derived ATTRIBUTES (derived from the **openv.roles** table at startup
 	track: true | [false] 				enable search tracking
 	ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
 	tx: "db.table" 						translate table
+
+where  the [defaults] are derived from the **openv.roles** table at startup.
 
 Attributes will null keys are always ignored.
 
