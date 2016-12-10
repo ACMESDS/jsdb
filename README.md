@@ -2,22 +2,31 @@
 @class dsvar [![Forked from SourceForge](https://sourceforge.net)]
 # DSVAR
 
-The DSVAR NodeJS modules is a database agnosticator that provides a normalized JS dataset interface to a (default 
-MySQL-Cluster) database using:
+The DSVAR NodeJS modules is a database agnosticator that provides a "normalized" JS dataset context to a (default 
+MySQL-Cluster) database as follows:
 	
-	sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
+	var DSVAR = require("dsvar");
+	
+	DSVAR.thread( function (sql) {
+		sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
 
-		var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
+			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
 
+		});
 	});
 
-where dsX are datasets and where sql in a MySQL connector.  Or, a lone dataset ds can be created thusly:
+where dsN are datasets, sql in a MySQL connector, and dataset ATTRIBUTES = {key:value, ... } are 
+described below.
 
-	var DSVAR = require("dsvar"),
-		  ds = new DSVAR.DS(sql, ATTRIBUTES);
+Alternatively, a lone dataset ds can be created thusly:
 
-where ATTRIBUTES = {key:value, ... } are described below.  In this way, dataset queries can be 
-performed in a db-agnostic way using:
+	var DSVAR = require("dsvar");
+	
+	FSVAR.thread( function (sql) {
+		var ds = new DSVAR.DS(sql, ATTRIBUTES);
+	})
+
+In this way, "normalized" dataset queries can be performed in a db-agnostic way using:
 
 	ds.rec = { FIELD:VALUE, ... }				// update matched record(s) 
 	ds.rec = [ {...}, {...}, ... ]						// insert record(s)
