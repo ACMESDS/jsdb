@@ -2,7 +2,7 @@
 @class dsvar [![Forked from SourceForge](https://sourceforge.net)]
 # DSVAR
 
-The DSVAR NodeJS modules is a database agnosticator that provides a "normalized" JS dataset context to a (default 
+DSVAR is a database agnosticator that provides a "normalized" JS dataset context to a (default 
 MySQL-Cluster) database as follows:
 	
 	var DSVAR = require("dsvar");
@@ -22,7 +22,7 @@ Alternatively, a lone dataset ds can be created thusly:
 
 	var DSVAR = require("dsvar");
 	
-	FSVAR.thread( function (sql) {
+	DSVAR.thread( function (sql) {
 		var ds = new DSVAR.DS(sql, ATTRIBUTES);
 	})
 
