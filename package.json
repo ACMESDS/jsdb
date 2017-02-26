@@ -11,5 +11,8 @@
     "url": "git@git.geointapps.org/acmesds:dsvar"
   },
   "author": "acme",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "readable-stream": "^2.2.3"
+  }
 }
