@@ -132,7 +132,7 @@ var
 		
 		msql: null,  //< reserved for mysql connector
 		
-		io: null,		//< reserver for socketio
+		io: null,	//< reserver for socketio
 		
 		thread: function (cb) {
 
@@ -225,9 +225,9 @@ DSVAR.DS.prototype = {
 	
 	x: function xquery(opt,key,buf) {  // extends me.query and me.opts
 		
-		var me = this,
-			keys = key.split(" "),
-			ag = keys[1] || "least(?,1)",
+		var me = this,  			// target ds 
+			keys = key.split(" "),  // key the the sql command
+			ag = keys[1] || "least(?,1)",  // method to aggregrate 
 			type = opt ? opt.constructor : null;
 			
 		if (type) 
@@ -515,6 +515,17 @@ DSVAR.DS.prototype = {
 						case Object:
 							
 							me.query += ` ${key} ?`;
+							
+							/*
+							for (var n in opt) {  // object subkeys are json fields
+								var js = opt[n];
+								if (typeof js == "object") {
+									var js = JSON.stringify(js);
+									me.query += `,json_merge(${n},${js})`;
+									delete opt[n];
+								}
+							*/
+							
 							me.opts.push(opt);
 							break;
 							
@@ -547,16 +558,16 @@ DSVAR.DS.prototype = {
 	
 	update: function (req,res) { // update record(s) in dataset
 		
-		function hawk(log) {
+		function hawk(log) {  // journal changes 
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
 //	console.log(hawk);
 				sql.query(
 					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
 					Copy({
-						Hawk: hawk.Hawk,
-						Power: hawk.Power,
-						Updates: 1
+						Hawk: hawk.Hawk,  	// moderator
+						Power: hawk.Power, 	// moderator's level
+						Updates: 1 					// init number of updates made
 					}, log)
 				);
 			});
@@ -565,7 +576,7 @@ DSVAR.DS.prototype = {
 		var	me = this,
 			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
 			table = attr.tx || me.table,
-			ID = me.where.ID ,
+			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql;
 		
@@ -582,9 +593,9 @@ DSVAR.DS.prototype = {
 		else
 		if (me.safe || me.unsafeok) {
 			
-			if (me.journal) {
-				hawk({Dataset:me.table, Field:""});
-				for (var key in req) {
+			if (me.journal) {  // journal the change if enabled
+				hawk({Dataset:me.table, Field:""});  // journal entry for the record itself
+				for (var key in req) { 		// journal entry for each record key being changed
 					hawk({Dataset:me.table, Field:key});
 					hawk({Dataset:"", Field:key});
 				}
