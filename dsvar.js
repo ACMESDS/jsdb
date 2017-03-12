@@ -312,6 +312,14 @@ DSVAR.DS.prototype = {
 					}
 					break;
 
+				case "GEO":
+					if (opt)
+						opt.split(",").each( function (n,geo) {
+							me.query += `,st_asgeojson(${geo}) AS g${geo}`;
+						});
+					
+					break;
+					
 				case "SELECT":
 
 					switch (type) {
@@ -339,6 +347,7 @@ DSVAR.DS.prototype = {
 								me.x(opt.bin, "IN BINARY MODE");
 								me.x(opt.qex, "WITH QUERY EXPANSION");
 								me.x(opt.has,"HAS");
+								me.x(opt.geo,"GEO");
 								me.x(opt.browse, "BROWSE");
 								me.x(opt.pivot, "PIVOT");
 							}
