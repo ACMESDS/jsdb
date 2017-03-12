@@ -53,6 +53,7 @@ var
 	DSVAR = module.exports = {
 		
 		errors: {		//< errors messages
+			nillUpdate: new Error("nill update query"),
 			unsafeQuery: new Error("unsafe queries not allowed"),
 			unsupportedQuery: new Error("query not supported"),
 			invalidQuery: new Error("query invalid")
@@ -132,7 +133,11 @@ var
 		
 		msql: null,  //< reserved for mysql connector
 		
-		io: null,	//< reserver for socketio
+		io: {	//< reserved for socketio
+			 sockets: {
+				 emit: null
+			 }
+		},
 		
 		thread: function (cb) {
 
@@ -192,14 +197,14 @@ var
 
 		DS: function(sql,atts,defs) {
 	
-			this.sql = sql;
-			this.err = null;
-			this.query = "";
-			this.opts = null;
-			this.unsafeok = true;
-			this.trace = true;
-			this.journal = true;
-			this.ag = "";
+			this.sql = sql;  	// sql connector
+			this.err = null;	// default sql error response
+			this.query = "";  // sql query
+			this.opts = null;	// ?-options to sql query
+			this.unsafeok = true;  // allow/disallow unsafe queries
+			this.trace = true;   // trace ?-compressed sql queries
+			this.journal = true;	// attempt journally of updates to jou.table database
+			this.ag = ""; 		// default aggregator
 
 			var def = DSVAR.attrs[atts.table] || defs || {};
 
@@ -221,9 +226,19 @@ var
 		}
 	};
 
+/*
+CRUD interface ds.rec = req where req is an
+		Error: respond with error req
+		Array: respond with statis on inserting records req into ds
+		Object: respond with status on updating ds with req record then respond with status
+		null: respond with status on deleting records matching ds attributes
+		Function: respond on req callback with ds records matching ds attributes
+		"X": dataset CRUD (ds.rec = ds.data) X=select,update,delete,create,execute 
+		"lock.X": lock/unlock record for dataset CRUD
+*/
 DSVAR.DS.prototype = {
 	
-	x: function xquery(opt,key,buf) {  // extends me.query and me.opts
+	x: function xquery(opt,key,buf) {  // query builder extends me.query and me.opts
 		
 		var me = this,  			// target ds 
 			keys = key.split(" "),  // key the the sql command
@@ -557,11 +572,16 @@ DSVAR.DS.prototype = {
 	},
 	
 	update: function (req,res) { // update record(s) in dataset
+
+		function isEmpty(obj) {
+			for (var n in obj) return false;
+			return true;
+		}
 		
 		function hawk(log) {  // journal changes 
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
-//	console.log(hawk);
+console.log(hawk);
 				sql.query(
 					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
 					Copy({
@@ -591,9 +611,15 @@ DSVAR.DS.prototype = {
 			res( DSVAR.errors.unsafeQuery );
 
 		else
+		if ( isEmpty(req) )
+			res( DSVAR.errors.nillUpdate );
+		
+		else
 		if (me.safe || me.unsafeok) {
 			
-			if (me.journal) {  // journal the change if enabled
+			me.journal = false;
+			
+			if (me.journal) {  // attempt change journal when enabled
 				hawk({Dataset:me.table, Field:""});  // journal entry for the record itself
 				for (var key in req) { 		// journal entry for each record key being changed
 					hawk({Dataset:me.table, Field:key});
@@ -759,28 +785,31 @@ DSVAR.DS.prototype = {
 		
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true; 
 		
-		if (!req.length) req = [{}];   // force at least one insert
+		if (!req.length) req = [{}];   // force at least one insert attempt
 		
 		req.each(function (n,rec) {
+			
 			sql.query(
 				me.query = isEmpty(rec)
-					? " INSERT INTO ?? VALUE ()"
-					: " INSERT INTO ?? SET ?" ,
+					? "INSERT INTO ?? VALUE ()"
+					:  "INSERT INTO ?? SET ?" ,
 
-					[table,rec], function (err,info) {
+				[table,rec], 
+				
+				function (err,info) {
 
-				if (!n && res) { 					// respond only to first insert
-					res( err || info );
+					if (!n && res) { 					// respond only to first insert
+						res( err || info );
 
-					if (DSVAR.io.sockets.emit && !err) 		// Notify clients of change.  
-						DSVAR.io.sockets.emit( "insert", {
-							table: me.table, 
-							body: rec, 
-							ID: info.insertId, 
-							from: client
-							//flag: flags.client
-						});
-				}			
+						if (DSVAR.io.sockets.emit && !err) 		// Notify clients of change.  
+							DSVAR.io.sockets.emit( "insert", {
+								table: me.table, 
+								body: rec, 
+								ID: info.insertId, 
+								from: client
+								//flag: flags.client
+							});
+					}			
 
 			});
 
@@ -789,7 +818,7 @@ DSVAR.DS.prototype = {
 
 	},
 
-	get rec() { 
+	get rec() {   // reserved
 	},
 	
 	unlock: function (ID, cb, lockcb) {  			// unlock record 
@@ -797,39 +826,42 @@ DSVAR.DS.prototype = {
 			sql = me.sql,
 			lockID = {Lock:`${me.table}.${ID}`, Client:me.client};
 		
-		sql.query(
-			"DELETE FROM openv.locks WHERE least(?)", 
-			lockID, 
-			function (err,info) {
-				
-			if (info.affectedRows) {
-				cb();
-				sql.query("COMMIT");  // commit queues transaction
-			}
-			
-			else
-			if (lockcb)
-				sql.query(
-					"INSERT INTO openv.locks SET ?",
-					lockID, 
-					function (err,info) {
-						
-					if (err)
-						me.res( "record already locked by another" );
+		if (ID)
+			sql.query(
+				"DELETE FROM openv.locks WHERE least(?)", 
+				lockID, 
+				function (err,info) {
 
-					else
-						sql.query("START TRANSACTION", function (err) {  // queue this transaction
-							lockcb();
-						});
-				});	
-			
-			else
-				me.res( "record must be locked" );
-		});
+				if (info.affectedRows) {
+					cb();
+					sql.query("COMMIT");  // commit queues transaction
+				}
+
+				else
+				if (lockcb)
+					sql.query(
+						"INSERT INTO openv.locks SET ?",
+						lockID, 
+						function (err,info) {
+
+						if (err)
+							me.res( "record already locked by another" );
+
+						else
+							sql.query("START TRANSACTION", function (err) {  // queue this transaction
+								lockcb();
+							});
+					});	
+
+				else
+					me.res( "record must be locked" );
+			});
+		else
+			me.res("missing record ID");
 	},
 
-	set rec(req) { 									// crud operation
-		var me = this,
+	set rec(req) { 									// crud interface
+		var me = this, 
 			res = me.res;
 		
 		if (req) 
@@ -857,7 +889,7 @@ DSVAR.DS.prototype = {
 				default:
 				
 					if (me.trace) Trace(
-						`${req.toUpperCase()} ${me.table} FOR ${me.client} ON ${CLUSTER.isMaster ? "MASTER" : "CORE"+CLUSTER.worker.id}`
+						`${req.toUpperCase()} ${me.table} FOR ${me.client} RECORD ${me.where.ID}`
 					);
 				
 					switch (req) {
@@ -877,7 +909,7 @@ DSVAR.DS.prototype = {
 									});
 								
 								else
-									res( "no record" );
+									res( "no record found" );
 								
 							};
 							
@@ -885,21 +917,21 @@ DSVAR.DS.prototype = {
 						
 						case "lock.delete":
 							
-							me.unlock(ID, function () {
+							me.unlock(me.where.ID, function () {
 								me.rec = null;
 							});
 							break;
 													
 						case "lock.insert":
 
-							me.unlock(ID, function () {
+							me.unlock(me.where.ID, function () {
 								me.rec = [me.data];
 							});
 							break;
 							
 						case "lock.update":
 
-							me.unlock(ID, function () {
+							me.unlock(me.where.ID, function () {
 								me.rec = me.data;
 							});
 							break;
