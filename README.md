@@ -68,8 +68,9 @@ as well as:
 	track: true | [false] 				enable search tracking
 	ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
 	tx: "db.table" 						translate table
+	geo: "field" 						geometry field to return as geojson
 
-where  the [defaults] are derived from the **openv.roles** table at startup.
+where  default attributes are derived from the **openv.attrs** table on DSVAR startup.
 
 Attributes will null keys are always ignored.
 

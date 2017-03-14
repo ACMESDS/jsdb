@@ -34,7 +34,7 @@ var 											// totem bindings
 
 var 											// globals
 	DEFAULT = {
-		ATTRS:	{tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0}
+		ATTRS:	{tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:null}
 	};
 
 function Trace(msg,arg) {
@@ -77,22 +77,29 @@ var
 						]);
 
 						var Attrs  = DSVAR.attrs;
-						sql.query(  // Default haand revise table attributes
+						sql.query(  // Default hand revise table attributes
 							"SELECT * FROM openv.attrs",
 							function (err,attrs) {
 							
-							attrs.each(function (n,attr) {  // defaults
-								var Attr = Attrs[attr.Dataset] = {
-									search: [],
-									journal: attr.Journal,
-									tx: attr.Tx,
-									flatten: attr.Flatten,
-									doc: attr.Special,
-									unsafeok: attr.Unsafeok,
-									track: attr.Track,
-									trace: attr.Trace
-								};
-							});
+							if (err) {
+								Trace(err);
+								attrs = {};
+							}
+							
+							else
+								attrs.each(function (n,attr) {  // defaults
+									var Attr = Attrs[attr.Dataset] = {
+										search: [],
+										journal: attr.Journal,
+										tx: attr.Tx,
+										flatten: attr.Flatten,
+										doc: attr.Special,
+										unsafeok: attr.Unsafeok,
+										track: attr.Track,
+										trace: attr.Trace,
+										geo: attr.Geo
+									};
+								});
 							
 							 // make fulltext fields searchable
 							
@@ -205,6 +212,10 @@ var
 			this.trace = true;   // trace ?-compressed sql queries
 			this.journal = true;	// attempt journally of updates to jou.table database
 			this.ag = ""; 		// default aggregator
+			this.index = {select:"*"}; 	// data search and index
+			this.client = "guest"; 		// default client 
+			
+			if (atts.constructor == String) atts = {table:atts};
 
 			var def = DSVAR.attrs[atts.table] || defs || {};
 
@@ -219,8 +230,6 @@ var
 					default:	
 						this[n] = def[n];
 				}
-
-			if (atts.constructor == String) atts = {table:atts};
 
 			for (var n in atts) this[n] = atts[n];
 		}
@@ -312,14 +321,6 @@ DSVAR.DS.prototype = {
 					}
 					break;
 
-				case "GEO":
-					if (opt)
-						opt.split(",").each( function (n,geo) {
-							me.query += `,st_asgeojson(${geo}) AS g${geo}`;
-						});
-					
-					break;
-					
 				case "SELECT":
 
 					switch (type) {
@@ -331,6 +332,7 @@ DSVAR.DS.prototype = {
 						case String:
 							if (opt == "*") 
 								me.query += ` ${key} *`;
+							
 							else {
 								me.query += ` ${key} ${opt}`;
 								me.unsafe = true;
@@ -341,18 +343,22 @@ DSVAR.DS.prototype = {
 							
 							if (opt.idx) 
 								me.x(opt.idx, key);
+							
 							else {
 								me.query += ` ${key} *`;
 								me.x(opt.nlp, "");
 								me.x(opt.bin, "IN BINARY MODE");
 								me.x(opt.qex, "WITH QUERY EXPANSION");
 								me.x(opt.has,"HAS");
-								me.x(opt.geo,"GEO");
 								me.x(opt.browse, "BROWSE");
 								me.x(opt.pivot, "PIVOT");
 							}
 							break;
 					}	
+					
+					if ( me.geo ) 
+						me.query += `,st_asgeojson(${me.geo}) AS g${me.geo}`;
+					
 					break;
 
 				case "JOIN":
@@ -661,7 +667,7 @@ console.log(hawk);
 	},
 	
 	select: function (req,res) { // select record(s) from dataset
-
+		
 		var	me = this,
 			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
 			table = attr.tx || me.table,
@@ -669,8 +675,8 @@ console.log(hawk);
 			sql = me.sql;
 		
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
-			
-		me.x(me.index || "*", "SELECT SQL_CALC_FOUND_ROWS");
+		
+		me.x(me.index.select, "SELECT SQL_CALC_FOUND_ROWS");
 		me.x(table, "FROM");
 		me.x(me.join, "JOIN", {});
 		me.x(me.where, "WHERE "+me.ag);
@@ -891,14 +897,13 @@ console.log(hawk);
 					break;
 					
 				case Function:
-				
 					me.select(req,res);
 					break;
 					
 				default:
 				
 					if (me.trace) Trace(
-						`${req.toUpperCase()} ${me.table} FOR ${me.client} RECORD ${me.where.ID}`
+						`${req.toUpperCase()} ${me.table} FOR ${me.client}`
 					);
 				
 					switch (req) {
