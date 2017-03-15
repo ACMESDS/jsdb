@@ -23,9 +23,18 @@ var 											// totem bindings
 		],
 				
 		Array: [
-			function Escape(slash) {
+			function Escape(slash,cb) {
 				var q = "`";
-				return  q + this.join(slash ? `${q},'${slash}',${q}` : `${q},${q}`) + q;
+				
+				if (cb) {
+					var rtn = [];
+					this.each(function (n,el) {
+						rtn.push( cb(el) );
+					});
+					return rtn.join(slash);
+				}
+				else						
+					return  q + this.join(slash ? `${q}${slash}${q}` : `${q},${q}`) + q;
 			}
 		]
 	}),
@@ -34,7 +43,23 @@ var 											// totem bindings
 
 var 											// globals
 	DEFAULT = {
-		ATTRS:	{tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:null}
+		ATTRS:	{
+			sql: null, // sql connector
+			query: "",  // sql query
+			opts: null,	// ?-options to sql query
+			unsafeok: true,  // allow/disallow unsafe queries
+			trace: true,   // trace ?-compressed sql queries
+			journal: true,	// attempt journally of updates to jou.table database
+			ag: "", 		// default aggregator
+			index: {select:"*"}, 	// data search and index
+			client: "guest", 		// default client 
+			track: false, 		// change journal tracking
+			geo: "", 	// geojson selector = key as key,key as key,...
+			search: "", // fulltext selectors = key,key,...
+			doc: "", 	// table description
+			json: {} 	// json vars = key:default
+		}
+		// {tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:"",search:"",json:{}}
 	};
 
 function Trace(msg,arg) {
@@ -56,80 +81,84 @@ var
 			nillUpdate: new Error("nill update query"),
 			unsafeQuery: new Error("unsafe queries not allowed"),
 			unsupportedQuery: new Error("query not supported"),
-			invalidQuery: new Error("query invalid")
+			invalidQuery: new Error("query invalid"),
+			noTable: new Error("dataset definition missing table name")
 		},
 		
 		attrs: {		//< primed with mysql table attributes during config
 		},
 		
-		config: function (opts) {
+		config: function (opts, cb) {
 			
 			if (opts) Copy(opts,DSVAR);
 			
 			if (mysql = DSVAR.mysql) {
 				mysql.pool = MYSQL.createPool(mysql.opts);
 
-				if (thread = DSVAR.thread)
-					thread( function (sql) {
+				if (sqlThread = DSVAR.thread)
+					sqlThread( function (sql) {
 						ENUM.extend(sql.constructor, [
-							eachTable,
+							indexEach,
+							indexAll,
+							indexTables,
+							indexJsons,
 							context
 						]);
 
+						if (cb) cb(sql);
+						
 						var Attrs  = DSVAR.attrs;
-						sql.query(  // Default hand revise table attributes
+						sql.query(  // Default table attributes
 							"SELECT * FROM openv.attrs",
 							function (err,attrs) {
 							
-							if (err) {
+							if (err) 
 								Trace(err);
-								attrs = {};
-							}
 							
 							else
 								attrs.each(function (n,attr) {  // defaults
-									var Attr = Attrs[attr.Dataset] = {
-										search: [],
+									var Attr = Attrs[attr.Dataset] = Copy({
 										journal: attr.Journal,
 										tx: attr.Tx,
 										flatten: attr.Flatten,
 										doc: attr.Special,
 										unsafeok: attr.Unsafeok,
 										track: attr.Track,
-										trace: attr.Trace,
-										geo: attr.Geo
-									};
+										trace: attr.Trace
+									}, Copy(DEFAULT.ATTRS, {}));
 								});
 							
-							 // make fulltext fields searchable
-							
-							sql.eachTable({from:"app1"}, function (tab) { // get a table name
-								var Attr = Attrs[tab] || DEFAULT.ATTRS;
-
-								sql.query(			// get all keys for this table
-									"SHOW KEYS FROM app1."+tab, 
-									function (err,keys) { 
-
-									var search = [];
-									keys.each( function (n,key) {  // only fulltext  keys are searchable
-										if (key.Index_type == "FULLTEXT")
-											search.push(key.Column_name);
-									});
-
-									if (search.length) 
-										Attr.search = search.Escape();
-									
-								});
-							});	
-							
-							// journal all moderated datasets 
+							sql.indexTables( "app1", function (tab) { // get fulltext searchable and geometry fields in app1 tables
+								var Attr = Attrs[tab];
 								
-							sql.query("SELECT Dataset FROM openv.hawks GROUP BY Dataset")
+								if ( !Attr )
+									Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
+
+								sql.indexAll(
+									`SHOW KEYS FROM app1.${tab} WHERE Index_type="fulltext"`, 
+									"Column_name", [],
+									function (keys) {
+										Attr.search = keys.Escape();
+								});
+
+								sql.indexAll(
+									`SHOW FIELDS FROM app1.${tab} WHERE Type="geometry"`, 
+									"Field", [],
+									function (keys) {
+										Attr.geo = keys.Escape(",", function (key) { 
+											var q = "`";
+											return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
+										});
+								});
+							});
+							
+							sql.query(   // journal all moderated datasets 
+								"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
 							.on("result", function (mon) { 
 								var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
 								Attr.journal = 1;
 							});
-
+								
 							sql.release();  // begone with thee							
 						});
 					});	
@@ -202,10 +231,9 @@ var
 				cb( nosqlConnection( DSVAR.errors.noDB ) );
 		},
 
-		DS: function(sql,atts,defs) {
+		DS: function(sql,ats) {  // create dataset with given sql connector and attributes
 	
-			this.sql = sql;  	// sql connector
-			this.err = null;	// default sql error response
+			/*
 			this.query = "";  // sql query
 			this.opts = null;	// ?-options to sql query
 			this.unsafeok = true;  // allow/disallow unsafe queries
@@ -214,24 +242,32 @@ var
 			this.ag = ""; 		// default aggregator
 			this.index = {select:"*"}; 	// data search and index
 			this.client = "guest"; 		// default client 
+			*/
+			if (ats.constructor == String) ats = {table:ats};
+
+			if (ats.table) {  // default then override attributes			
+				var def = DSVAR.attrs[ats.table] || DEFAULT.ATTRS; //|| defs || {}; // defaults
+
+				for (var n in def)
+					switch (n) {
+						case "select":
+						case "update":
+						case "delete":
+						case "insert":
+							this.prototype[n] = def[n];
+							break;
+						default:	
+							this[n] = def[n];
+					}
+
+				this.sql = sql;  	// sql connector
+				this.err = null;	// default sql error response
+				
+				for (var n in ats) this[n] = ats[n];
+			}
 			
-			if (atts.constructor == String) atts = {table:atts};
-
-			var def = DSVAR.attrs[atts.table] || defs || {};
-
-			for (var n in def)
-				switch (n) {
-					case "select":
-					case "update":
-					case "delete":
-					case "insert":
-						this.prototype[n] = def[n];
-						break;
-					default:	
-						this[n] = def[n];
-				}
-
-			for (var n in atts) this[n] = atts[n];
+			else
+				Trace(DSVAR.errors.noTable);
 		}
 	};
 
@@ -270,7 +306,7 @@ DSVAR.DS.prototype = {
 						: pivots.slice(0,nodes.length+1);
 
 					var name = pivots[nodes.length] || "concat('ID',ID)";
-					var path = me.group.Escape(slash);
+					var path = me.group.Escape(",'"+slash+"',");
 
 					me.query += `, cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
 							+ ", count(ID) AS NodeCount "
@@ -356,8 +392,8 @@ DSVAR.DS.prototype = {
 							break;
 					}	
 					
-					if ( me.geo ) 
-						me.query += `,st_asgeojson(${me.geo}) AS g${me.geo}`;
+					if ( me.geo )  // any geometry fields are returned as geojson
+						me.query += ","+me.geo;
 					
 					break;
 
@@ -596,7 +632,7 @@ DSVAR.DS.prototype = {
 		function hawk(log) {  // journal changes 
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
-console.log(hawk);
+//console.log(hawk);
 				sql.query(
 					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
 					Copy({
@@ -674,7 +710,7 @@ console.log(hawk);
 			client = me.client,
 			sql = me.sql;
 		
-		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
+		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true; 
 		
 		me.x(me.index.select, "SELECT SQL_CALC_FOUND_ROWS");
 		me.x(table, "FROM");
@@ -975,22 +1011,48 @@ console.log(hawk);
 	
 };
 
-function eachTable (opts,cb) {
-	var sql = this,
-		 key = `Tables_in_${opts.from}`;
-	
-	sql.query(
-		"SHOW TABLES "+(opts.from?"FROM "+opts.from:"")+(opts.where?" WHERE "+opts.where:""),
+function indexEach(query, idx, cb) {
+	this.query(
+		query,
 		function (err,recs) {
 			recs.each( function (n,rec) {
-				cb(rec[key]);
+				cb(idx ? rec[idx] : rec);
 			});
 	});
 }
-						
+
+function indexAll(query, idx, rtns, cb) {
+	this.query(	
+		query,
+		function (err,recs) { 
+			recs.each( function (n,rec) {  
+				rtns.push(idx ? rec[idx] : rec); 
+			});
+
+			cb(rtns);
+	});
+}								
+
+function indexTables(from, cb) {
+	this.indexEach( `SHOW TABLES FROM ${from}`, `Tables_in_${from}`, cb);
+}
+
+function indexJsons(from, jsons, cb) {
+	this.indexAll(
+		`SHOW FIELDS FROM ${from} WHERE Type="json"`,
+		"Field", [],
+		function (keys) {
+			keys.each(function (n,key) {
+				jsons[key.toLowerCase()] = {};
+			});
+			cb(jsons);
+	});
+}
+			
 function context(ctx,cb) {
 	var sql = this;
 	var context = {};
-	for (var n in ctx) context[n] = new DSVAR.DS(sql, ctx[n], {table:n});
+	for (var n in ctx) 
+			context[n] = new DSVAR.DS(sql, ctx[n]);  //new DSVAR.DS(sql, ctx[n], {table:n});
 	if (cb) cb(context);
 }
