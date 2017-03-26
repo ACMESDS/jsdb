@@ -25,10 +25,10 @@ described below.  Alternatively, a lone dataset can be created thusly:
 
 The following JS-agnosticated CRUD queries can then be performed:
 
-	ds.rec = { FIELD:VALUE, ... }				// update matched record(s) 
-	ds.rec = [ {...}, {...}, ... ]						// insert record(s)
-	ds.rec = null 										// delete matched record(s)
-	ds.rec = function CB(recs,me) {...}		// select matched record(s)
+	ds.rec = { FIELD:VALUE, ... }		// update matched record(s) 
+	ds.rec = [ {...}, {...}, ... ]		// insert record(s)
+	ds.rec = null 		// delete matched record(s)
+	ds.rec = function CB(recs,me) {...}			// select matched record(s)
 
 with callback to a response CB method when the query completes.  Alternatively,
 queries can be issued like this:
@@ -57,14 +57,14 @@ Dataset ATTRIBUTES = { key: value, ... } provide SQL agnostication:
 In addition, update journalling, search tracking, query notification and auto field converstion is 
 supported using these ATTRIBUTES:
 
-	unsafeok: 	[true] | false 		#allow potentially unsafe queries
-	trace: [true] | false				#trace queries
-	journal: true | [false] 			#enable table journalling
-	search: "field,field,..." 			#define fulltext search fields
-	track: true | [false] 				#enable search tracking
-	ag: "..." 								#aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
-	tx: "db.table" 						#translate table
-	geo: "field" 						#geometry field to return as geojson
+	unsafeok: 	[true] | false 		// allow potentially unsafe queries
+	trace: [true] | false			// trace queries
+	journal: true | [false] 		// enable table journalling
+	search: "field,field,..." 		// define fulltext search fields
+	track: true | [false] 		// enable search tracking
+	ag: "..." 		// aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
+	tx: "db.table" 	// translate table
+	geo: "field" 		// geometry field to return as geojson
 
 Default ATTRIBUTES are derived from the **openv.attrs** table on DSVAR startup.  
 
