@@ -54,7 +54,7 @@ Dataset ATTRIBUTES = { key: value, ... } provide SQL agnostication:
 	limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
 	index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
 
-In addition, update journalling, search tracking, query notification and auto field converstion is 
+In addition, update journalling, search tracking, query broadcasting, and auto field conversion is 
 supported using these ATTRIBUTES:
 
 	unsafeok: 	[true] | false 		// allow potentially unsafe queries
