@@ -2,8 +2,7 @@
 @class dsvar [![Forked from SourceForge](https://sourceforge.net)]
 # DSVAR
 
-DSVAR is a database agnosticator that provides a "normalized" JS dataset context to a (default 
-MySQL-Cluster) database as follows:
+DSVAR provides a JS-agnosticator to a (default MySQL-Cluster) database:
 	
 	var DSVAR = require("dsvar");
 	
@@ -16,9 +15,7 @@ MySQL-Cluster) database as follows:
 	});
 
 where dsN are datasets, sql in a MySQL connector, and dataset ATTRIBUTES = {key:value, ... } are 
-described below.
-
-Alternatively, a lone dataset ds can be created thusly:
+described below.  Alternatively, a lone dataset can be created thusly:
 
 	var DSVAR = require("dsvar");
 	
@@ -26,53 +23,50 @@ Alternatively, a lone dataset ds can be created thusly:
 		var ds = new DSVAR.DS(sql, ATTRIBUTES);
 	})
 
-In this way, "normalized" dataset queries can be performed in a db-agnostic way using:
+The following JS-agnosticated CRUD queries can then be performed:
 
 	ds.rec = { FIELD:VALUE, ... }				// update matched record(s) 
 	ds.rec = [ {...}, {...}, ... ]						// insert record(s)
 	ds.rec = null 										// delete matched record(s)
 	ds.rec = function CB(recs,me) {...}		// select matched record(s)
 
-with callback to its non-null response .res method when the query completes.  Any CRUDE 
-
-		"select" | "delete" | "update" | "insert" | "execute" 
-
-query can also be performed using:
+with callback to a response CB method when the query completes.  Alternatively,
+queries can be issued like this:
 
 	ds.res = callback() { ... }
 	ds.data = [ ... ]
 	ds.rec = CRUDE
 
-or in record-locked mode (as reflected to the **openv.lock** table) using:
+or in record-locked mode using:
 
 	ds.rec = "lock." + CRUDE
 
-Dataset ATTRIBUTES = { key: value, ... } include:
+where CRUDE = "select" | "delete" | "update" | "insert" | "execute".
+
+Dataset ATTRIBUTES = { key: value, ... } provide SQL agnostication:
 
 	table: 	DB.TABLE || TABLE
 	where: 	[ FIELD, FIELD, ... ] | { CLAUSE:null, nlp:PATTERN, bin:PATTERN, qex:PATTERN, has:PATTERN, like:PATTERN, FIELD:VALUE, FIELD:[MIN,MAX], ...} | CLAUSE
-	res: 	function (ds) {...}
-
+	res: 	function CB(ds) {...}
 	having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} | CLAUSE
 	order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
 	group: 	[ FIELD, ...] | "FIELD, ..."
 	limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
 	index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
 
-as well as:
+In addition, update journalling, search tracking, query notification and auto field converstion is 
+supported using these ATTRIBUTES:
 
-	unsafeok: 	[true] | false 		allow potentially unsafe queries
-	trace: [true] | false				trace queries
-	journal: true | [false] 			enable table journalling
-	search: "field,field,..." 			define fulltext search fields
-	track: true | [false] 				enable search tracking
-	ag: "..." 								aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
-	tx: "db.table" 						translate table
-	geo: "field" 						geometry field to return as geojson
+	unsafeok: 	[true] | false 		#allow potentially unsafe queries
+	trace: [true] | false				#trace queries
+	journal: true | [false] 			#enable table journalling
+	search: "field,field,..." 			#define fulltext search fields
+	track: true | [false] 				#enable search tracking
+	ag: "..." 								#aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
+	tx: "db.table" 						#translate table
+	geo: "field" 						#geometry field to return as geojson
 
-where  default attributes are derived from the **openv.attrs** table on DSVAR startup.
-
-Attributes will null keys are always ignored.
+Default ATTRIBUTES are derived from the **openv.attrs** table on DSVAR startup.  
 
 The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
 by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
@@ -104,7 +98,8 @@ Require and config DSVAR:
 
 	});
 	
-The .DS and .thread options can be overridden if the default MySQL-Cluster support does not suffice.
+Its default DS generator and thread() method can be overridden if the default MySQL-Cluster 
+support does not suffice.
 
 Create dataset on a new sql thread
 
