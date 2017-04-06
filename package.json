@@ -13,6 +13,7 @@
   "author": "acme",
   "license": "ISC",
   "dependencies": {
+    "expectation-maximization": "^1.5.0",
     "readable-stream": "^2.2.3"
   }
 }
