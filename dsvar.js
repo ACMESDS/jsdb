@@ -43,7 +43,7 @@ var 											// totem bindings
 
 var 											// globals
 	DEFAULT = {
-		ATTRS:	{
+		ATTRS:	{ 					// default dataset attributes
 			sql: null, // sql connector
 			query: "",  // sql query
 			opts: null,	// ?-options to sql query
@@ -51,15 +51,15 @@ var 											// globals
 			trace: true,   // trace ?-compressed sql queries
 			journal: true,	// attempt journally of updates to jou.table database
 			ag: "", 		// default aggregator
-			index: {select:"*"}, 	// data search and index
+			index: {select:"*"}, 	// data fulltexts and index
 			client: "guest", 		// default client 
 			track: false, 		// change journal tracking
 			geo: "", 	// geojson selector = key as key,key as key,...
-			search: "", // fulltext selectors = key,key,...
+			fulltexts: "", // fulltext selectors = key,key,...
 			doc: "", 	// table description
 			json: {} 	// json vars = key:default
 		}
-		// {tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:"",search:"",json:{}}
+		// {tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:"",fulltexts:"",json:{}}
 	};
 
 function Trace(msg,arg) {
@@ -138,7 +138,7 @@ var
 									`SHOW KEYS FROM app1.${tab} WHERE Index_type="fulltext"`, 
 									"Column_name", [],
 									function (keys) {
-										Attr.search = keys.Escape();
+										Attr.fulltexts = keys.Escape();
 								});
 
 								sql.indexAll(
@@ -233,16 +233,6 @@ var
 
 		DS: function(sql,ats) {  // create dataset with given sql connector and attributes
 	
-			/*
-			this.query = "";  // sql query
-			this.opts = null;	// ?-options to sql query
-			this.unsafeok = true;  // allow/disallow unsafe queries
-			this.trace = true;   // trace ?-compressed sql queries
-			this.journal = true;	// attempt journally of updates to jou.table database
-			this.ag = ""; 		// default aggregator
-			this.index = {select:"*"}; 	// data search and index
-			this.client = "guest"; 		// default client 
-			*/
 			if (ats.constructor == String) ats = {table:ats};
 
 			if (ats.table) {  // default then override attributes			
@@ -341,8 +331,8 @@ DSVAR.DS.prototype = {
 				case "IN":
 				case "WITH":
 				
-					if (me.search) {
-						me.query += `,MATCH(${me.search}) AGAINST('${opt}' ${key}) AS Score`;
+					if (me.fulltexts) {
+						me.query += `,MATCH(${me.fulltexts}) AGAINST('${opt}' ${key}) AS Score`;
 						me.having = me.score ? "Score>"+me.score : ["Score"];
 						me.searching = opt;
 					}
@@ -350,8 +340,8 @@ DSVAR.DS.prototype = {
 				
 				case "HAS":
 				
-					if (me.search) {
-						me.query += `,instr(concat(${me.search}),'${opt}') AS Score`;
+					if (me.fulltexts) {
+						me.query += `,instr(concat(${me.fulltexts}),'${opt}') AS Score`;
 						me.having = me.score ? "Score>"+me.score : ["Score"];
 						me.searching = opt;
 					}
@@ -375,6 +365,7 @@ DSVAR.DS.prototype = {
 							}
 							break;
 
+						/*
 						case Object:
 							
 							if (opt.idx) 
@@ -390,8 +381,11 @@ DSVAR.DS.prototype = {
 								me.x(opt.pivot, "PIVOT");
 							}
 							break;
+						*/
 					}	
 					
+					me.x(me.index, "INDEX");
+
 					if ( me.geo )  // any geometry fields are returned as geojson
 						me.query += ","+me.geo;
 					
@@ -491,7 +485,7 @@ DSVAR.DS.prototype = {
 											}
 											break;
 											
-										case Object:  // using search query e.g. x={nlp:pattern}
+										case Object:  // using fulltexts query e.g. x={nlp:pattern}
 											
 											var fld = n.Escape();
 											if (pat = test.nlp) 
@@ -598,6 +592,16 @@ DSVAR.DS.prototype = {
 						default:
 							me.unsafe = true;
 					}
+					break;
+					
+				case "INDEX":
+					//console.log(opt);
+					me.x(opt.nlp, "");
+					me.x(opt.bin, "IN BINARY MODE");
+					me.x(opt.qex, "WITH QUERY EXPANSION");
+					me.x(opt.has,"HAS");
+					me.x(opt.browse, "BROWSE");
+					me.x(opt.pivot, "PIVOT");
 					break;
 					
 				default:
