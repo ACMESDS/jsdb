@@ -85,7 +85,7 @@ var
 			noTable: new Error("dataset definition missing table name")
 		},
 		
-		attrs: {		//< primed with mysql table attributes during config
+		attrs: {		//< reserved for openv dataset attributes derived during config
 		},
 		
 		config: function (opts, cb) {
@@ -175,7 +175,7 @@ var
 			 }
 		},
 		
-		thread: function (cb) {
+		thread: function (cb) {  // callback cb(sql) with a sql connection
 
 			function nosqlConnection(err) {
 		
