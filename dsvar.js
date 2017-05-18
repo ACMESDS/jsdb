@@ -636,7 +636,7 @@ DSVAR.DS.prototype = {
 		function hawk(log) {  // journal changes 
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
-//console.log(hawk);
+console.log(hawk);
 				sql.query(
 					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
 					Copy({
@@ -672,14 +672,16 @@ DSVAR.DS.prototype = {
 		else
 		if (me.safe || me.unsafeok) {
 			
-			me.journal = false;
+			//me.journal = false;
 			
 			if (me.journal) {  // attempt change journal when enabled
 				hawk({Dataset:me.table, Field:""});  // journal entry for the record itself
+				/* uncomment to enable
 				for (var key in req) { 		// journal entry for each record key being changed
 					hawk({Dataset:me.table, Field:key});
 					hawk({Dataset:"", Field:key});
 				}
+				*/
 			}
 			
 			sql.query(me.query, me.opts, function (err,info) {
