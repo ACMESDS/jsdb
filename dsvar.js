@@ -690,7 +690,7 @@ console.log(hawk);
 
 				if (DSVAR.io.sockets.emit && ID && !err) 		// Notify clients of change.  
 					DSVAR.io.sockets.emit( "update", {
-						table: me.table, 
+						path: "/"+me.table+".db", 
 						body: req, 
 						ID: ID, 
 						from: client
@@ -810,7 +810,7 @@ console.log(hawk);
 
 				if (DSVAR.io.sockets.emit && ID && !err) 		// Notify clients of change.  
 					DSVAR.io.sockets.emit( "delete", {
-						table: me.table, 
+						path: "/"+me.table+".db", 
 						ID: ID, 
 						from: me.client
 						//flag: flags.client
@@ -860,7 +860,7 @@ console.log(hawk);
 
 						if (DSVAR.io.sockets.emit && !err) 		// Notify clients of change.  
 							DSVAR.io.sockets.emit( "insert", {
-								table: me.table, 
+								path: "/"+me.table+".db", 
 								body: rec, 
 								ID: info.insertId, 
 								from: client
