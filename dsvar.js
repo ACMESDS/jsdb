@@ -275,7 +275,8 @@ DSVAR.DS.prototype = {
 	
 	x: function xquery(opt,key,buf) {  // query builder extends me.query and me.opts
 		
-		var me = this,  			// target ds 
+		var 
+			me = this,  			// target ds 
 			keys = key.split(" "),  // key the the sql command
 			ag = keys[1] || "least(?,1)",  // method to aggregrate 
 			type = opt ? opt.constructor : null;
@@ -310,7 +311,8 @@ DSVAR.DS.prototype = {
 					
 				case "PIVOT":
 					
-					var where = me.where,
+					var 
+						where = me.where,
 						nodeID = where.NodeID || "root";
 
 					if (nodeID == "root") {
@@ -633,10 +635,10 @@ DSVAR.DS.prototype = {
 			return true;
 		}
 		
-		function hawk(log) {  // journal changes 
+		function hawkChange(log) {  // journal changes 
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
-console.log(hawk);
+//console.log(hawk);
 				sql.query(
 					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
 					Copy({
@@ -648,7 +650,8 @@ console.log(hawk);
 			});
 		}
 		
-		var	me = this,
+		var	
+			me = this,
 			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
 			table = attr.tx || me.table,
 			ID = me.where.ID,
@@ -671,12 +674,15 @@ console.log(hawk);
 		
 		else
 		if (me.safe || me.unsafeok) {
+			/*
+			//uncomment to disable journalling
+			me.journal = false;
+			*/
 			
-			//me.journal = false;
-			
-			if (me.journal) {  // attempt change journal when enabled
-				hawk({Dataset:me.table, Field:""});  // journal entry for the record itself
-				/* uncomment to enable
+			if (me.journal) {  // attempt change journal if enabled
+				hawkChange({Dataset:me.table, Field:""});  // journal entry for the record itself
+				/*
+				// uncomment to enable
 				for (var key in req) { 		// journal entry for each record key being changed
 					hawk({Dataset:me.table, Field:key});
 					hawk({Dataset:"", Field:key});
@@ -710,7 +716,8 @@ console.log(hawk);
 	
 	select: function (req,res) { // select record(s) from dataset
 		
-		var	me = this,
+		var	
+			me = this,
 			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
 			table = attr.tx || me.table,
 			client = me.client,
@@ -787,7 +794,8 @@ console.log(hawk);
 	
 	delete: function (req,res) {  // delete record(s) from dataset
 		
-		var	me = this,
+		var	
+			me = this,
 			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,			
 			table = attr.tx || me.table,
 			ID = me.where.ID,
@@ -833,7 +841,8 @@ console.log(hawk);
 			return true;
 		}
 		
-		var	me = this,
+		var	
+			me = this,
 			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,			
 			table = attr.tx || me.table,
 			ID = me.where.ID,
@@ -879,7 +888,8 @@ console.log(hawk);
 	},
 	
 	unlock: function (ID, cb, lockcb) {  			// unlock record 
-		var me = this,
+		var 
+			me = this,
 			sql = me.sql,
 			lockID = {Lock:`${me.table}.${ID}`, Client:me.client};
 		
@@ -1015,7 +1025,7 @@ console.log(hawk);
 		return this;
 	}
 	
-};
+}
 
 function indexEach(query, idx, cb) {
 	this.query(
@@ -1055,10 +1065,13 @@ function indexJsons(from, jsons, cb) {
 	});
 }
 			
-function context(ctx,cb) {
-	var sql = this;
-	var context = {};
+function context(ctx,cb) {  // callback cb(context) with a DSVAR context
+	var 
+		sql = this,
+		context = {};
+	
 	for (var n in ctx) 
 			context[n] = new DSVAR.DS(sql, ctx[n]);  //new DSVAR.DS(sql, ctx[n], {table:n});
+	
 	if (cb) cb(context);
 }
