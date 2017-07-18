@@ -62,18 +62,6 @@ var 											// globals
 		// {tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:"",fulltexts:"",json:{}}
 	};
 
-function Trace(msg,arg) {
-	
-	if (msg.constructor == String)
-		console.log("S>"+msg);
-	else
-		console.log("S>"+msg.sql);
-
-	if (arg) console.log(arg);
-		
-	return msg;
-}
-
 var
 	DSVAR = module.exports = {
 		
@@ -1074,4 +1062,8 @@ function context(ctx,cb) {  // callback cb(context) with a DSVAR context
 			context[n] = new DSVAR.DS(sql, ctx[n]);  //new DSVAR.DS(sql, ctx[n], {table:n});
 	
 	if (cb) cb(context);
+}
+
+function Trace(msg,arg) {
+	ENUM.trace("V>",msg,arg);
 }
