@@ -76,6 +76,10 @@ var
 		attrs: {		//< reserved for openv dataset attributes derived during config
 		},
 		
+		getdb: null,	//< reserved for method to derived the DSVAR database
+
+		db: null,	//< derived by the getdb method
+		
 		config: function (opts, cb) {
 			
 			if (opts) Copy(opts,DSVAR);
@@ -85,7 +89,7 @@ var
 
 				if (sqlThread = DSVAR.thread)
 					sqlThread( function (sql) {
-						ENUM.extend(sql.constructor, [
+						ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
 							indexEach,
 							indexAll,
 							indexTables,
@@ -93,63 +97,77 @@ var
 							context
 						]);
 
-						if (cb) cb(sql);
-						
-						var Attrs  = DSVAR.attrs;
-						sql.query(  // Default table attributes
-							"SELECT * FROM openv.attrs",
-							function (err,attrs) {
-							
-							if (err) 
-								Trace(err);
-							
-							else
-								attrs.each(function (n,attr) {  // defaults
-									var Attr = Attrs[attr.Dataset] = Copy({
-										journal: attr.Journal,
-										tx: attr.Tx,
-										flatten: attr.Flatten,
-										doc: attr.Special,
-										unsafeok: attr.Unsafeok,
-										track: attr.Track,
-										trace: attr.Trace
-									}, Copy(DEFAULT.ATTRS, {}));
-								});
-							
-							sql.indexTables( "app1", function (tab) { // get fulltext searchable and geometry fields in app1 tables
-								var Attr = Attrs[tab];
+						if (getdb = DSVAR.getdb)  
+							getdb(sql, function (db) {  // Establish databases and default dataset attributes
 								
-								if ( !Attr )
-									Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
+								DSVAR.db = db;  // Establish database name
+								
+								var Attrs  = DSVAR.attrs;
+								sql.query(    // Defined default dataset attributes
+									"SELECT * FROM openv.attrs",
+									function (err,attrs) {
 
-								sql.indexAll(
-									`SHOW KEYS FROM app1.${tab} WHERE Index_type="fulltext"`, 
-									"Column_name", [],
-									function (keys) {
-										Attr.fulltexts = keys.Escape();
-								});
+									if (err) 
+										Trace(err);
 
-								sql.indexAll(
-									`SHOW FIELDS FROM app1.${tab} WHERE Type="geometry"`, 
-									"Field", [],
-									function (keys) {
-										Attr.geo = keys.Escape(",", function (key) { 
-											var q = "`";
-											return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
+									else
+										attrs.each(function (n,attr) {  // defaults
+											var Attr = Attrs[attr.Dataset] = Copy({
+												journal: attr.Journal,
+												tx: attr.Tx,
+												flatten: attr.Flatten,
+												doc: attr.Special,
+												unsafeok: attr.Unsafeok,
+												track: attr.Track,
+												trace: attr.Trace
+											}, Copy(DEFAULT.ATTRS, {}));
 										});
+
+									sql.indexTables( DSVAR.db, function (tab) { // get fulltext searchable and geometry fields in tables
+										var Attr = Attrs[tab];
+
+										if ( !Attr )
+											Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
+
+										sql.indexAll(
+											`SHOW KEYS FROM ${DSVAR.db}.${tab} WHERE Index_type="fulltext"`, 
+											"Column_name", [],
+											function (keys) {
+												Attr.fulltexts = keys.Escape();
+										});
+
+										sql.indexAll(
+											`SHOW FIELDS FROM ${DSVAR.db}.${tab} WHERE Type="geometry"`, 
+											"Field", [],
+											function (keys) {
+												Attr.geo = keys.Escape(",", function (key) { 
+													var q = "`";
+													return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
+												});
+										});
+									});
+
+									sql.query(   // journal all moderated datasets 
+										"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
+									.on("result", function (mon) { 
+										var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
+										Attr.journal = 1;
+									});	
+										
+									// callback now that dsvar environment has been defined
+									if (cb) cb(sql);
 								});
+
 							});
-							
-							sql.query(   // journal all moderated datasets 
-								"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
-							.on("result", function (mon) { 
-								var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
-								Attr.journal = 1;
-							});
-								
-							sql.release();  // begone with thee							
-						});
-					});	
+						
+						else
+							Trace("getdb() method was not defined");
+
+						sql.release();  // begone with thee	
+					});
+				
+				else
+					Trace("thread() method was not defined");
 			}
 			
 			return DSVAR;
