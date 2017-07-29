@@ -76,9 +76,9 @@ var
 		attrs: {		//< reserved for openv dataset attributes derived during config
 		},
 		
-		getdb: null,	//< reserved for method to derived the DSVAR database
+		getdb: null,	//< reserved for method to derive DSVAR.db
 
-		db: null,	//< derived by the getdb method
+		db: null,	//< derived by getdb()
 		
 		config: function (opts, cb) {
 			

@@ -147,10 +147,10 @@ Download the latest version with
 
 	git clone https://git.geointapps.org/acmesds/dsvar
 
-Typically, you will want to redirect the following to your project/master
+Typically, you will want to redirect the following to your project
 
-	ln -s ../master/test.js test.js
-	ln -s ../master/maint.sh maint.sh
+	ln -s PROJECT/totem/test.js test.js
+	ln -s PROJECT/totem/maint.sh maint.sh
 
 ## License
 
