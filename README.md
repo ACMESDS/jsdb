@@ -66,8 +66,6 @@ supported using these ATTRIBUTES:
 	tx: "db.table" 	// translate table
 	geo: "field" 		// geometry field to return as geojson
 
-Default ATTRIBUTES are derived from the **openv.attrs** table on DSVAR startup.  
-
 The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
 by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
 and limited by .limit ATTRIBUTES.  Select will search for PATTERN 
@@ -76,6 +74,15 @@ or group recording according to its index.browse (file navigation) or index.pivo
 
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
 was configured), and willjournal the change when jounalling is enabled.
+
+## Databases
+
+openv.attrs   Defines default ATTRIBUTES on startup.  
+openv.hawks	 Queried for moderaters when journalling a dataset.
+openv.journal	Updated with changes when journalling enabled.
+openv.tracks	Updated when search tracking enabled.
+openv.locks	Updated when record locks used (e.g. using forms).
+app.X 	Scanned for tables that possess fulltext searchable fields.
 
 ## Examples
 

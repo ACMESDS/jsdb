@@ -76,10 +76,6 @@ var
 		attrs: {		//< reserved for openv dataset attributes derived during config
 		},
 		
-		getdb: null,	//< reserved for method to derive DSVAR.db
-
-		db: null,	//< derived by getdb()
-		
 		config: function (opts, cb) {
 			
 			if (opts) Copy(opts,DSVAR);
@@ -97,73 +93,64 @@ var
 							context
 						]);
 
-						if (getdb = DSVAR.getdb)  
-							getdb(sql, function (db) {  // Establish databases and default dataset attributes
-								
-								DSVAR.db = db;  // Establish database name
-								
-								var Attrs  = DSVAR.attrs;
-								sql.query(    // Defined default dataset attributes
-									"SELECT * FROM openv.attrs",
-									function (err,attrs) {
+						var Attrs  = DSVAR.attrs;
+						sql.query(    // Defined default dataset attributes
+							"SELECT * FROM openv.attrs",
+							function (err,attrs) {
 
-									if (err) 
-										Trace(err);
+							if (err) 
+								Trace(err);
 
-									else
-										attrs.each(function (n,attr) {  // defaults
-											var Attr = Attrs[attr.Dataset] = Copy({
-												journal: attr.Journal,
-												tx: attr.Tx,
-												flatten: attr.Flatten,
-												doc: attr.Special,
-												unsafeok: attr.Unsafeok,
-												track: attr.Track,
-												trace: attr.Trace
-											}, Copy(DEFAULT.ATTRS, {}));
-										});
-
-									sql.indexTables( DSVAR.db, function (tab) { // get fulltext searchable and geometry fields in tables
-										var Attr = Attrs[tab];
-
-										if ( !Attr )
-											Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
-
-										sql.indexAll(
-											`SHOW KEYS FROM ${DSVAR.db}.${tab} WHERE Index_type="fulltext"`, 
-											"Column_name", [],
-											function (keys) {
-												Attr.fulltexts = keys.Escape();
-										});
-
-										sql.indexAll(
-											`SHOW FIELDS FROM ${DSVAR.db}.${tab} WHERE Type="geometry"`, 
-											"Field", [],
-											function (keys) {
-												Attr.geo = keys.Escape(",", function (key) { 
-													var q = "`";
-													return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
-												});
-										});
-									});
-
-									sql.query(   // journal all moderated datasets 
-										"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
-									.on("result", function (mon) { 
-										var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
-										Attr.journal = 1;
-									});	
-										
-									// callback now that dsvar environment has been defined
-									if (cb) cb(sql);
+							else
+								attrs.each(function (n,attr) {  // defaults
+									var Attr = Attrs[attr.Dataset] = Copy({
+										journal: attr.Journal,
+										tx: attr.Tx,
+										flatten: attr.Flatten,
+										doc: attr.Special,
+										unsafeok: attr.Unsafeok,
+										track: attr.Track,
+										trace: attr.Trace
+									}, Copy(DEFAULT.ATTRS, {}));
 								});
 
-							});
-						
-						else
-							Trace("getdb() method was not defined");
+							sql.indexTables( "app", function (tab) { // get fulltext searchable and geometry fields in tables
+								var Attr = Attrs[tab];
 
-						sql.release();  // begone with thee	
+								if ( !Attr )
+									Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
+
+								sql.indexAll(
+									`SHOW KEYS FROM app.${tab} WHERE Index_type="fulltext"`, 
+									"Column_name", [],
+									function (keys) {
+										Attr.fulltexts = keys.Escape();
+								});
+
+								sql.indexAll(
+									`SHOW FIELDS FROM app.${tab} WHERE Type="geometry"`, 
+									"Field", [],
+									function (keys) {
+										Attr.geo = keys.Escape(",", function (key) { 
+											var q = "`";
+											return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
+										});
+								});
+							});
+
+							sql.query(   // journal all moderated datasets 
+								"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
+							.on("result", function (mon) { 
+								var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
+								Attr.journal = 1;
+							});	
+
+							sql.release();  // begone with thee	
+								
+							// callback now that dsvar environment has been defined
+							if (cb) cb(sql);
+						});
+							
 					});
 				
 				else
