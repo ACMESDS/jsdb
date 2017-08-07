@@ -90,6 +90,8 @@ var
 							indexAll,
 							indexTables,
 							indexJsons,
+							indexSearchables,
+							indexGeometries,
 							context
 						]);
 
@@ -114,27 +116,24 @@ var
 									}, Copy(DEFAULT.ATTRS, {}));
 								});
 
-							sql.indexTables( "app", function (tab) { // get fulltext searchable and geometry fields in tables
-								var Attr = Attrs[tab];
+							sql.IndexTables( "app", function (tab) { // get fulltext searchable and geometry fields in tables
+								var 
+									Attr = Attrs[tab],
+									ds = `app.${tab}`;
 
 								if ( !Attr )
 									Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
 
-								sql.indexAll(
-									`SHOW KEYS FROM app.${tab} WHERE Index_type="fulltext"`, 
-									"Column_name", [],
-									function (keys) {
-										Attr.fulltexts = keys.Escape();
+								sql.indexSearchables( ds, function (keys) {
+									Attr.fulltexts = keys.Escape();
+									console.log("FULLTEXT "+Attr.fulltexts);
 								});
 
-								sql.indexAll(
-									`SHOW FIELDS FROM app.${tab} WHERE Type="geometry"`, 
-									"Field", [],
-									function (keys) {
-										Attr.geo = keys.Escape(",", function (key) { 
-											var q = "`";
-											return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
-										});
+								sql.indexGeometries( ds, function (keys) {
+									var q = "`";
+									Attr.geo = keys.Escape(",", function (key) { 
+										return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
+									});
 								});
 							});
 
@@ -1021,25 +1020,23 @@ DSVAR.DS.prototype = {
 }
 
 function indexEach(query, idx, cb) {
-	this.query(
-		query,
-		function (err,recs) {
-			recs.each( function (n,rec) {
-				cb(idx ? rec[idx] : rec);
-			});
+	this.query( query, function (err,recs) {
+		recs.each( function (n,rec) {
+			cb( rec[idx] );
+		});
 	});
 }
 
 function indexAll(query, idx, rtns, cb) {
-	this.query(	
-		query,
-		function (err,recs) { 
-			recs.each( function (n,rec) {  
-				rtns.push(idx ? rec[idx] : rec); 
-			});
+	
+	this.query(	query, function (err,recs) { 
+		recs.each( function (n,rec) {  
+			rtns.push(rec[idx]); 
+		});
 
-			cb(rtns);
+		cb(rtns);
 	});
+		
 }								
 
 function indexTables(from, cb) {
@@ -1049,7 +1046,7 @@ function indexTables(from, cb) {
 function indexJsons(from, jsons, cb) {
 	this.indexAll(
 		`SHOW FIELDS FROM ${from} WHERE Type="json"`,
-		"Field", [],
+		"Field", [], 
 		function (keys) {
 			keys.each(function (n,key) {
 				jsons[key.toLowerCase()] = {};
@@ -1057,7 +1054,21 @@ function indexJsons(from, jsons, cb) {
 			cb(jsons);
 	});
 }
-			
+
+function indexSearchables(from, cb) {
+	this.indexAll(
+		`SHOW KEYS FROM ${from} WHERE Index_type="fulltext"`, 
+		"Column_name", [], cb
+	);
+}
+
+function indexGeometries(from, cb) {
+	sql.indexAll(
+		`SHOW FIELDS FROM ${from} WHERE Type="geometry"`, 
+		"Field", [], cb
+	);
+}
+		
 function context(ctx,cb) {  // callback cb(context) with a DSVAR context
 	var 
 		sql = this,
