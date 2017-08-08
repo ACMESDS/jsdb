@@ -88,10 +88,11 @@ var
 						ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
 							indexEach,
 							indexAll,
-							indexTables,
-							indexJsons,
-							indexSearchables,
-							indexGeometries,
+							eachTable,
+							jsonKeys,
+							searchableKeys,
+							geometryKeys,
+							textKeys,
 							context
 						]);
 
@@ -116,7 +117,7 @@ var
 									}, Copy(DEFAULT.ATTRS, {}));
 								});
 
-							sql.IndexTables( "app", function (tab) { // get fulltext searchable and geometry fields in tables
+							sql.eachTable( "app", function (tab) { // get fulltext searchable and geometry fields in tables
 								var 
 									Attr = Attrs[tab],
 									ds = `app.${tab}`;
@@ -124,12 +125,11 @@ var
 								if ( !Attr )
 									Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
 
-								sql.indexSearchables( ds, function (keys) {
+								sql.searchableKeys( ds, function (keys) {
 									Attr.fulltexts = keys.Escape();
-									console.log("FULLTEXT "+Attr.fulltexts);
 								});
 
-								sql.indexGeometries( ds, function (keys) {
+								sql.geometryKeys( ds, function (keys) {
 									var q = "`";
 									Attr.geo = keys.Escape(",", function (key) { 
 										return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
@@ -153,7 +153,7 @@ var
 					});
 				
 				else
-					Trace("thread() method was not defined");
+					Trace("no thread() method defined");
 			}
 			
 			return DSVAR;
@@ -1039,31 +1039,31 @@ function indexAll(query, idx, rtns, cb) {
 		
 }								
 
-function indexTables(from, cb) {
+function eachTable(from, cb) {
 	this.indexEach( `SHOW TABLES FROM ${from}`, `Tables_in_${from}`, cb);
 }
 
-function indexJsons(from, jsons, cb) {
+function jsonKeys(from, cb) {
 	this.indexAll(
-		`SHOW FIELDS FROM ${from} WHERE Type="json"`,
-		"Field", [], 
-		function (keys) {
-			keys.each(function (n,key) {
-				jsons[key.toLowerCase()] = {};
-			});
-			cb(jsons);
-	});
+		`SHOW FIELDS FROM ${from} WHERE Type="json" OR Type="mediumtext"` ,
+		"Field", [], cb);
 }
 
-function indexSearchables(from, cb) {
+function textKeys(from, cb) {
+	this.indexAll(
+		`SHOW FIELDS FROM ${from} WHERE Type="mediumtext"`,
+		"Field", [], cb);
+}
+
+function searchableKeys(from, cb) {
 	this.indexAll(
 		`SHOW KEYS FROM ${from} WHERE Index_type="fulltext"`, 
 		"Column_name", [], cb
 	);
 }
 
-function indexGeometries(from, cb) {
-	sql.indexAll(
+function geometryKeys(from, cb) {
+	this.indexAll(
 		`SHOW FIELDS FROM ${from} WHERE Type="geometry"`, 
 		"Field", [], cb
 	);
