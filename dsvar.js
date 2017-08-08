@@ -129,6 +129,7 @@ var
 									Attr.fulltexts = keys.Escape();
 								});
 
+								if (false)
 								sql.geometryKeys( ds, function (keys) {
 									var q = "`";
 									Attr.geo = keys.Escape(",", function (key) { 
