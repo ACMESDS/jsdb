@@ -73,7 +73,7 @@ var
 			noTable: new Error("dataset definition missing table name")
 		},
 		
-		attrs: {		//< reserved for openv dataset attributes derived during config
+		attrs: {		//< reserved for dataset attributes derived during config
 		},
 		
 		config: function (opts, cb) {
@@ -106,7 +106,7 @@ var
 
 							else
 								attrs.each(function (n,attr) {  // defaults
-									var Attr = Attrs[attr.Dataset] = Copy({
+									var Attr = Attrs[attr.Dataset] = new Object( Copy( DEFAULT.ATTRS, {
 										journal: attr.Journal,
 										tx: attr.Tx,
 										flatten: attr.Flatten,
@@ -114,7 +114,7 @@ var
 										unsafeok: attr.Unsafeok,
 										track: attr.Track,
 										trace: attr.Trace
-									}, Copy(DEFAULT.ATTRS, {}));
+									}));
 								});
 
 							sql.eachTable( "app", function (tab) { // get fulltext searchable and geometry fields in tables
@@ -123,7 +123,7 @@ var
 									ds = `app.${tab}`;
 
 								if ( !Attr )
-									Attr = Attrs[tab] = Copy(DEFAULT.ATTRS, {});
+									Attr = Attrs[tab] = new Object(DEFAULT.ATTRS);
 
 								sql.searchableKeys( ds, function (keys) {
 									Attr.fulltexts = keys.Escape();
@@ -745,7 +745,7 @@ DSVAR.DS.prototype = {
 						if (err) return req( err, me );
 						
 						recs.each(function (n,rec) {
-							rtn.push( Copy(rec,{}) );
+							rtn.push( new Object( rec ) );
 						});
 						
 						req(rtn,me);
