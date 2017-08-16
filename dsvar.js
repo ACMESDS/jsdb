@@ -1069,7 +1069,7 @@ function geometryKeys(from, cb) {
 		"Field", [], cb
 	);
 }
-		
+
 function context(ctx,cb) {  // callback cb(context) with a DSVAR context
 	var 
 		sql = this,
