@@ -1020,7 +1020,7 @@ DSVAR.DS.prototype = {
 	
 }
 
-function indexEach(query, idx, cb) {
+function indexEach(query, idx, cb) {	
 	this.query( query, function (err,recs) {
 		recs.each( function (n,rec) {
 			cb( rec[idx] );
