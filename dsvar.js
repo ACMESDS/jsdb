@@ -1,7 +1,7 @@
 // UNCLASSIFIED
 
 /**
- * @class dsvar
+ * @class DSVAR
  * @requires cluster
  * @requires enum
  * @requires mysql
