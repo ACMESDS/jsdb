@@ -1,7 +1,7 @@
 // UNCLASSIFIED
 
 /**
- * @class dsvar
+ * @class DSVAR
  * @requires cluster
  * @requires enum
  * @requires mysql
@@ -73,7 +73,7 @@ var
 			noTable: new Error("dataset definition missing table name")
 		},
 		
-		attrs: {		//< reserved for dataset attributes derived during config
+		dsAttrs: {		//< reserved for dataset attributes derived during config
 		},
 		
 		config: function (opts, cb) {
@@ -90,13 +90,13 @@ var
 							indexAll,
 							eachTable,
 							jsonKeys,
-							searchableKeys,
+							fulltextKeys,
 							geometryKeys,
 							textKeys,
 							context
 						]);
 
-						var Attrs  = DSVAR.attrs;
+						var Attrs  = DSVAR.dsAttrs;
 						sql.query(    // Defined default dataset attributes
 							"SELECT * FROM openv.attrs",
 							function (err,attrs) {
@@ -106,15 +106,17 @@ var
 
 							else
 								attrs.each(function (n,attr) {  // defaults
-									var Attr = Attrs[attr.Dataset] = new Object( Copy( DEFAULT.ATTRS, {
+									var Attr = Attrs[attr.Dataset] = Copy({
 										journal: attr.Journal,
-										tx: attr.Tx,
+										//tx: attr.Tx,
 										flatten: attr.Flatten,
 										doc: attr.Special,
 										unsafeok: attr.Unsafeok,
 										track: attr.Track,
 										trace: attr.Trace
-									}));
+									}, Copy( DEFAULT.ATTRS, {} ) );
+									
+									//console.log([attr.Dataset, Attr]);
 								});
 
 							sql.eachTable( "app", function (tab) { // get fulltext searchable and geometry fields in tables
@@ -125,7 +127,7 @@ var
 								if ( !Attr )
 									Attr = Attrs[tab] = new Object(DEFAULT.ATTRS);
 
-								sql.searchableKeys( ds, function (keys) {
+								sql.fulltextKeys( ds, function (keys) {
 									Attr.fulltexts = keys.Escape();
 								});
 
@@ -229,7 +231,7 @@ var
 			if (ats.constructor == String) ats = {table:ats};
 
 			if (ats.table) {  // default then override attributes			
-				var def = DSVAR.attrs[ats.table] || DEFAULT.ATTRS; //|| defs || {}; // defaults
+				var def = DSVAR.dsAttrs[ats.table] || DEFAULT.ATTRS; //|| defs || {}; // defaults
 
 				for (var n in def)
 					switch (n) {
@@ -645,8 +647,8 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
-			table = attr.tx || me.table,
+			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
+			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql;
@@ -711,8 +713,8 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,
-			table = attr.tx || me.table,
+			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
+			table = me.table,
 			client = me.client,
 			sql = me.sql;
 		
@@ -789,8 +791,8 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,			
-			table = attr.tx || me.table,
+			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
+			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql;
@@ -836,8 +838,8 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.attrs[me.table] || DEFAULT.ATTRS,			
-			table = attr.tx || me.table,
+			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
+			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
 			sql = me.sql;
@@ -1056,7 +1058,7 @@ function textKeys(from, cb) {
 		"Field", [], cb);
 }
 
-function searchableKeys(from, cb) {
+function fulltextKeys(from, cb) {
 	this.indexAll(
 		`SHOW KEYS FROM ${from} WHERE Index_type="fulltext"`, 
 		"Column_name", [], cb

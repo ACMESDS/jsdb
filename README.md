@@ -1,5 +1,10 @@
 /**
-@class dsvar [![Forked from SourceForge](https://sourceforge.net)]
+@class DSVAR 
+	[SourceForge](https://sourceforge.net) 
+	[github](https://github.com/acmesds/dsvar.git) 
+	[geointapps](https://git.geointapps.org/acmesds/dsvar)
+	[gitlab](https://gitlab.weat.nga.ic.gov/acmesds/dsvar.git)
+	
 # DSVAR
 
 DSVAR provides a JS-agnosticator to a (default MySQL-Cluster) database:
@@ -84,7 +89,23 @@ openv.tracks	Updated when search tracking enabled.
 openv.locks	Updated when record locks used (e.g. using forms).
 app.X 	Scanned for tables that possess fulltext searchable fields.
 
-## Examples
+## Use
+DSVAR is configured and started like this:
+
+	var TOTEM = require("../dsvar").config({
+			key: value, 						// set key
+			"key.key": value, 					// indexed set
+			"key.key.": value,					// indexed append
+			OBJECT: [ function (){}, ... ], 	// add OBJECT prototypes 
+			Function: function () {} 			// add chained initializer callback
+			:
+			:
+		}, function (err) {
+		console.log( err ? "something evil happended" : "Im running");
+	});
+
+where its configuration keys follow the [ENUM copy()](https://github.com/acmesds/enum) conventions and
+are described in its [PRM](/shares/prm/dsvar/index.html).
 
 Require and config DSVAR:
 
@@ -150,11 +171,7 @@ Update ds record(s) matched by ds.where
 	
 ## Installation
 
-Download the latest version with
-
-	git clone https://git.geointapps.org/acmesds/dsvar
-
-Typically, you will want to redirect the following to your project
+Clone from one of the repos.  You will typically want to redirect the following to your project
 
 	ln -s PROJECT/totem/test.js test.js
 	ln -s PROJECT/totem/maint.sh maint.sh
