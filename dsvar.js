@@ -48,7 +48,7 @@ var 											// globals
 			query: "",  // sql query
 			opts: null,	// ?-options to sql query
 			unsafeok: true,  // allow/disallow unsafe queries
-			trace: true,   // trace ?-compressed sql queries
+			trace: false,   // trace ?-compressed sql queries
 			journal: true,	// attempt journally of updates to jou.table database
 			ag: "", 		// default aggregator
 			index: {select:"*"}, 	// data fulltexts and index
@@ -93,6 +93,7 @@ var
 							fulltextKeys,
 							geometryKeys,
 							textKeys,
+							eachRec,
 							context
 						]);
 
@@ -762,7 +763,7 @@ DSVAR.DS.prototype = {
 					
 				case "all":
 				default:  
-					Trace( sql.query(me.query, me.opts, function (err,recs) {
+					sql.query(me.query, me.opts, function (err,recs) {
 						
 						if (me.track && me.searching && recs)
 							sql.query(
@@ -776,7 +777,7 @@ DSVAR.DS.prototype = {
 								]);
 									 
 						req( err || recs, me );
-					}) );
+					});
 			}
 		
 		else
@@ -1072,6 +1073,23 @@ function geometryKeys(from, cb) {
 	);
 }
 
+function eachRec(query, args, cb) {
+	this.query(query, args, function (err, recs) {
+		
+		if (err) 
+			cb( err, null, true );
+			
+		else {
+			var isEmpty = recs.each( function (n,rec,isLast) {
+				if ( cb(null, rec, isLast) ) return true;
+			});
+
+			if (isEmpty) 
+				cb( null, null, true );
+		}
+	});
+}
+		
 function context(ctx,cb) {  // callback cb(context) with a DSVAR context
 	var 
 		sql = this,
