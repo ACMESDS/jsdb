@@ -70,7 +70,8 @@ var
 			unsafeQuery: new Error("unsafe queries not allowed"),
 			unsupportedQuery: new Error("query not supported"),
 			invalidQuery: new Error("query invalid"),
-			noTable: new Error("dataset definition missing table name")
+			noTable: new Error("dataset definition missing table name"),
+			noDB: new Error("no database connected")
 		},
 		
 		dsAttrs: {		//< reserved for dataset attributes derived during config
@@ -157,7 +158,7 @@ var
 					});
 				
 				else
-					Trace("no thread() method defined");
+					Trace("no sql thread() provided");
 			}
 			
 			return DSVAR;
@@ -173,29 +174,35 @@ var
 		
 		thread: function (cb) {  // callback cb(sql) with a sql connection
 
-			function nosqlConnection(err) {
-		
-				var sql = {
-					query: function (q,args,cb) {
-						//if (cb||args) (cb||args)( err );
-						Trace(err+"");
-						return sql;
-					}, 
-					on: function (ev, cb) {
-						//cb( err );
-						Trace(err+"");
-						return sql;
-					},
-					sql: "", 
-					release: function () {
-						return sql;
-					},
-					createPool: function (opts) {
-						return sql;
-					}
-				};
+			function dummyConnector() {
+				var
+					This = this,
+					err = DSVAR.errors.noDB;
+				
+				this.query = function (q,args,cb) {
+					Trace("DUMMY "+q);
+					if (cb)
+						cb(err,[]);
+					else
+					if ( args.constructor == Function)
+						args(err,[]);
 
-				return sql;
+					return This;
+				};
+				
+				this.on = function (ev, cb) {
+					return This;
+				};
+				
+				this.sql = "DUMMY SQL CONNECTOR";
+				
+				this.release = function () {
+					return This;
+				};
+				
+				this.createPool = function (opts) {
+					return null;
+				};
 			}
 
 			var 
@@ -215,7 +222,7 @@ var
 								mysql.pool = MYSQL.createPool(mysql.opts);
 							});
 
-							cb( nosqlConnection(err) );
+							cb( dummyConnector(err) );
 						}
 						else 
 							cb( sql );
@@ -223,8 +230,9 @@ var
 
 				else
 					cb( MYSQL.createConnection(mysql.opts) );
+			
 			else 
-				cb( nosqlConnection( DSVAR.errors.noDB ) );
+				cb( new dummyConnector( ) ); 
 		},
 
 		DS: function(sql,ats) {  // create dataset with given sql connector and attributes
@@ -626,11 +634,6 @@ DSVAR.DS.prototype = {
 	
 	update: function (req,res) { // update record(s) in dataset
 
-		function isEmpty(obj) {
-			for (var n in obj) return false;
-			return true;
-		}
-		
 		function hawkChange(log) {  // journal changes 
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
@@ -665,7 +668,7 @@ DSVAR.DS.prototype = {
 			res( DSVAR.errors.unsafeQuery );
 
 		else
-		if ( isEmpty(req) )
+		if ( Each(req) ) // empty so ....
 			res( DSVAR.errors.nillUpdate );
 		
 		else
@@ -832,11 +835,6 @@ DSVAR.DS.prototype = {
 	
 	insert: function (req,res) {  // insert record(s) into dataset
 		
-		function isEmpty(obj) {
-			for (var n in obj) return false;
-			return true;
-		}
-		
 		var	
 			me = this,
 			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
@@ -852,7 +850,7 @@ DSVAR.DS.prototype = {
 		req.each(function (n,rec) {
 			
 			sql.query(
-				me.query = isEmpty(rec)
+				me.query = Each(rec)
 					? "INSERT INTO ?? VALUE ()"
 					:  "INSERT INTO ?? SET ?" ,
 
