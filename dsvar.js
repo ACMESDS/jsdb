@@ -39,7 +39,8 @@ var 											// totem bindings
 		]
 	}),
 	Copy = ENUM.copy,
-	Each = ENUM.each;
+	Each = ENUM.each,
+	Log = console.log;
 
 var 											// globals
 	DEFAULT = {
@@ -104,7 +105,7 @@ var
 							function (err,attrs) {
 
 							if (err) 
-								Trace(err);
+								Log(err);
 
 							else
 								attrs.each(function (n,attr) {  // defaults
@@ -158,7 +159,7 @@ var
 					});
 				
 				else
-					Trace("no sql thread() provided");
+					Trace("MISSING SQL THREAD CONFIG");
 			}
 			
 			return DSVAR;
@@ -180,7 +181,7 @@ var
 					err = DSVAR.errors.noDB;
 				
 				this.query = function (q,args,cb) {
-					Trace("DUMMY "+q);
+					Log("DUMMY "+q);
 					if (cb)
 						cb(err,[]);
 					else
@@ -212,11 +213,11 @@ var
 				if (mysql.pool)
 					mysql.pool.getConnection(function (err,sql) {
 						if (err) {
-							Trace( 
-								err
-								+ " total="	+ mysql.pool._allConnections.length 
-								+ " free="	+ mysql.pool._freeConnections.length
-								+ " queue="	+ mysql.pool._connectionQueue.length );
+							Log( err, {
+								total: mysql.pool._allConnections.length ,
+								free: mysql.pool._freeConnections.length,
+								queue: mysql.pool._connectionQueue.length 
+							});
 
 							mysql.pool.end( function (err) {
 								mysql.pool = MYSQL.createPool(mysql.opts);
@@ -261,7 +262,7 @@ var
 			}
 			
 			else
-				Trace(DSVAR.errors.noTable);
+				Trace(DSVAR.errors.noTable+"");
 		}
 	};
 
@@ -759,9 +760,10 @@ DSVAR.DS.prototype = {
 					break;
 				
 				case "trace":
-					Trace( sql.query(me.query, me.opts, function (err,recs) {	
+					Trace(me.query);
+					sql.query(me.query, me.opts, function (err,recs) {	
 						req( err || recs, me );
-					}));
+					});
 					break;
 					
 				case "all":
@@ -1099,6 +1101,6 @@ function context(ctx,cb) {  // callback cb(context) with a DSVAR context
 	if (cb) cb(context);
 }
 
-function Trace(msg,arg) {
-	ENUM.trace("V>",msg,arg);
+function Trace(msg,sql) {
+	ENUM.trace("V>",msg,sql);
 }
