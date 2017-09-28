@@ -158,7 +158,7 @@ var
 					});
 				
 				else
-					Trace("no sql thread() provided");
+					Trace("MISSING SQL thread() METHOD");
 			}
 			
 			return DSVAR;
@@ -218,9 +218,9 @@ var
 								+ " free="	+ mysql.pool._freeConnections.length
 								+ " queue="	+ mysql.pool._connectionQueue.length );
 
-							mysql.pool.end( function (err) {
+							/*mysql.pool.end( function (err) {
 								mysql.pool = MYSQL.createPool(mysql.opts);
-							});
+							}); */
 
 							cb( dummyConnector(err) );
 						}
