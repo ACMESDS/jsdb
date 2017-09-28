@@ -159,11 +159,7 @@ var
 					});
 				
 				else
-<<<<<<< HEAD
 					Trace("MISSING SQL thread() METHOD");
-=======
-					Trace("MISSING SQL THREAD CONFIG");
->>>>>>> e463ab559d5a9adf7e322c2351395f31c951d6b5
 			}
 			
 			return DSVAR;
