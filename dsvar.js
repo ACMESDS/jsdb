@@ -42,6 +42,7 @@ var 											// totem bindings
 	Each = ENUM.each,
 	Log = console.log;
 
+/*
 var 											// globals
 	DEFAULT = {
 		ATTRS:	{ 					// default dataset attributes
@@ -52,16 +53,17 @@ var 											// globals
 			trace: false,   // trace ?-compressed sql queries
 			journal: true,	// attempt journally of updates to jou.table database
 			ag: "", 		// default aggregator
-			index: {select:"*"}, 	// data fulltexts and index
+			index: {select:"*"}, 	// data search and index
 			client: "guest", 		// default client 
 			track: false, 		// change journal tracking
-			geo: "", 	// geojson selector = key as key,key as key,...
-			fulltexts: "", // fulltext selectors = key,key,...
+			//geo: "", 	// geojson selector = key as key,key as key,...
+			searchKeys: "", // fulltext match key,key,...
 			doc: "", 	// table description
-			json: {} 	// json vars = key:default
+			jsonKeys: [] 	// json vars = key:default
 		}
-		// {tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:"",fulltexts:"",json:{}}
+		// {tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:"",searchKeys:"",json:{}}
 	};
+*/
 
 var
 	DSVAR = module.exports = {
@@ -74,9 +76,25 @@ var
 			noTable: new Error("dataset definition missing table name"),
 			noDB: new Error("no database connected")
 		},
-		
-		dsAttrs: {		//< reserved for dataset attributes derived during config
+
+		defaultAttrs:	{ 					// default dataset attributes
+			sql: null, // sql connector
+			query: "",  // sql query
+			opts: null,	// ?-options to sql query
+			unsafeok: true,  // allow/disallow unsafe queries
+			trace: false,   // trace ?-compressed sql queries
+			journal: true,	// attempt journally of updates to jou.table database
+			ag: "", 		// default aggregator
+			index: {select:"*"}, 	// data search and index
+			client: "guest", 		// default client 
+			track: false, 		// change journal tracking
+			searchKeys: [], // fulltext searchable keys
+			jsonKeys: []  // json keys
 		},
+		
+		/*
+		dsAttrs: {		//< reserved for dataset attributes derived during config
+		}, */
 		
 		config: function (opts, cb) {
 			
@@ -89,16 +107,18 @@ var
 					sqlThread( function (sql) {
 						ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
 							indexEach,
-							indexAll,
 							eachTable,
+							getKeys,
+							getFields,
 							jsonKeys,
-							fulltextKeys,
+							searchKeys,
 							geometryKeys,
 							textKeys,
-							eachRec,
+							eachRecord,
 							context
 						]);
 
+						/*
 						var Attrs  = DSVAR.dsAttrs;
 						sql.query(    // Defined default dataset attributes
 							"SELECT * FROM openv.attrs",
@@ -130,17 +150,16 @@ var
 								if ( !Attr )
 									Attr = Attrs[tab] = new Object(DEFAULT.ATTRS);
 
-								sql.fulltextKeys( ds, function (keys) {
-									Attr.fulltexts = keys.Escape();
+								sql.searchKeys( ds, function (keys) {
+									Attr.searchKeys = keys.Escape();
 								});
 
-								if (false)
 								sql.geometryKeys( ds, function (keys) {
 									var q = "`";
 									Attr.geo = keys.Escape(",", function (key) { 
 										return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
 									});
-								});
+								}); 
 							});
 
 							sql.query(   // journal all moderated datasets 
@@ -150,12 +169,12 @@ var
 								Attr.journal = 1;
 							});	
 
-							sql.release();  // begone with thee	
+							sql.release();  // begonne with thee	
 								
 							// callback now that dsvar environment has been defined
 							if (cb) cb(sql);
 						});
-							
+						*/
 					});
 				
 				else
@@ -241,7 +260,7 @@ var
 			if (ats.constructor == String) ats = {table:ats};
 
 			if (ats.table) {  // default then override attributes			
-				var def = DSVAR.dsAttrs[ats.table] || DEFAULT.ATTRS; //|| defs || {}; // defaults
+				var def = DSVAR.defaultAttrs; //DSVAR.dsAttrs[ats.table] || DEFAULT.ATTRS; //|| defs || {}; // defaults
 
 				for (var n in def)
 					switch (n) {
@@ -259,6 +278,9 @@ var
 				this.err = null;	// default sql error response
 				
 				for (var n in ats) this[n] = ats[n];
+				
+				sql.searchKeys( this.table, this.searchKeys = []);	
+				sql.jsonKeys( this.table, this.jsonKeys = []);
 			}
 			
 			else
@@ -291,7 +313,8 @@ DSVAR.DS.prototype = {
 
 				case "BROWSE":
 
-					var	slash = "_", 
+					var	
+						slash = "_", 
 						where = me.where,
 						nodeID = where.NodeID,
 						nodes = nodeID ? nodeID.split(slash) : [],
@@ -338,20 +361,16 @@ DSVAR.DS.prototype = {
 				case "IN":
 				case "WITH":
 				
-					if (me.fulltexts) {
-						me.query += `,MATCH(${me.fulltexts}) AGAINST('${opt}' ${key}) AS Score`;
-						me.having = me.score ? "Score>"+me.score : ["Score"];
-						me.searching = opt;
-					}
+					me.query += `,MATCH(${me.searchKeys.join(",")}) AGAINST('${opt}' ${key}) AS Score`;
+					me.having = me.score ? "Score>"+me.score : ["Score"];
+					me.searching = opt;
 					break;
 				
 				case "HAS":
 				
-					if (me.fulltexts) {
-						me.query += `,instr(concat(${me.fulltexts}),'${opt}') AS Score`;
-						me.having = me.score ? "Score>"+me.score : ["Score"];
-						me.searching = opt;
-					}
+					me.query += `,instr(concat(${me.searchKeys.join(",")}),'${opt}') AS Score`;
+					me.having = me.score ? "Score>"+me.score : ["Score"];
+					me.searching = opt;
 					break;
 
 				case "SELECT":
@@ -393,8 +412,10 @@ DSVAR.DS.prototype = {
 					
 					me.x(me.index, "INDEX");
 
+					/*
 					if ( me.geo )  // any geometry fields are returned as geojson
 						me.query += ","+me.geo;
+					*/
 					
 					break;
 
@@ -492,7 +513,7 @@ DSVAR.DS.prototype = {
 											}
 											break;
 											
-										case Object:  // using fulltexts query e.g. x={nlp:pattern}
+										case Object:  // using searchKeys query e.g. x={nlp:pattern}
 											
 											var fld = n.Escape();
 											if (pat = test.nlp) 
@@ -592,6 +613,10 @@ DSVAR.DS.prototype = {
 									delete opt[n];
 								}
 							*/
+							me.jsonKeys.each( function (n,key) {
+								if ( key in opt ) 
+									opt[key] = JSON.stringify(opt[key]);
+							});
 							
 							me.opts.push(opt);
 							break;
@@ -652,7 +677,7 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
+			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
 			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
@@ -718,7 +743,7 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
+			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
 			table = me.table,
 			client = me.client,
 			sql = me.sql;
@@ -780,7 +805,7 @@ DSVAR.DS.prototype = {
 									 	Returned: recs.length
 									}, recs.length
 								]);
-									 
+						
 						req( err || recs, me );
 					});
 			}
@@ -797,7 +822,7 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
+			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
 			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
@@ -839,7 +864,7 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
+			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
 			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
@@ -1031,7 +1056,7 @@ function indexEach(query, idx, cb) {
 	});
 }
 
-function indexAll(query, idx, rtns, cb) {
+function indexList(query, idx, rtns, cb) {
 	
 	this.query(	query, function (err,recs) { 
 		recs.each( function (n,rec) {  
@@ -1047,47 +1072,38 @@ function eachTable(from, cb) {
 	this.indexEach( `SHOW TABLES FROM ${from}`, `Tables_in_${from}`, cb);
 }
 
-function jsonKeys(from, cb) {
-	this.indexAll(
-		`SHOW FIELDS FROM ${from} WHERE Type="json" OR Type="mediumtext"` ,
-		"Field", [], cb);
-}
-
-function textKeys(from, cb) {
-	this.indexAll(
-		`SHOW FIELDS FROM ${from} WHERE Type="mediumtext"`,
-		"Field", [], cb);
-}
-
-function fulltextKeys(from, cb) {
-	this.indexAll(
-		`SHOW KEYS FROM ${from} WHERE Index_type="fulltext"`, 
-		"Column_name", [], cb
-	);
-}
-
-function geometryKeys(from, cb) {
-	this.indexAll(
-		`SHOW FIELDS FROM ${from} WHERE Type="geometry"`, 
-		"Field", [], cb
-	);
-}
-
-function eachRec(query, args, cb) {
-	this.query(query, args, function (err, recs) {
-		
-		if (err) 
-			cb( err, null, true );
-			
-		else {
-			var isEmpty = recs.each( function (n,rec,isLast) {
-				if ( cb(null, rec, isLast) ) return true;
-			});
-
-			if (isEmpty) 
-				cb( null, null, true );
-		}
+function getKeys(table, type, keys) {
+	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type})
+	.on("result", function (rec) {
+		keys.push(rec.Column_name);
 	});
+}
+
+function getFields(table, type, keys) {
+	this.query(`SHOW FIELDS FROM ${table} WHERE ?`,{Type:type})
+	.on("result", function (rec) {
+		keys.push(rec.Field);
+	});
+}
+
+function jsonKeys(table, keys) {
+	this.getFields(table, "json", keys);
+}
+
+function textKeys(table, keys) {
+	this.getFields(table, "mediumtext", keys);
+}
+
+function searchKeys(table, keys) {
+	this.getKeys(table, "fulltext", keys);
+}
+
+function geometryKeys(table, keys) {
+	this.getFields(table, "geometry", keys);
+}
+
+function eachRecord(query, args, cb) {
+	this.query(query, args).on("result", cb);
 }
 		
 function context(ctx,cb) {  // callback cb(context) with a DSVAR context
@@ -1095,8 +1111,10 @@ function context(ctx,cb) {  // callback cb(context) with a DSVAR context
 		sql = this,
 		context = {};
 	
-	for (var n in ctx) 
+	for (var n in ctx) {
+		Trace(n);
 			context[n] = new DSVAR.DS(sql, ctx[n]);  //new DSVAR.DS(sql, ctx[n], {table:n});
+	}
 	
 	if (cb) cb(context);
 }
