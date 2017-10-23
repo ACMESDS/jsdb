@@ -84,7 +84,7 @@ var
 			unsafeok: true,  // allow/disallow unsafe queries
 			trace: false,   // trace ?-compressed sql queries
 			journal: true,	// attempt journally of updates to jou.table database
-			ag: "", 		// default aggregator
+			ag: "", 		// default aggregator "" implies "least(?,1)"
 			index: {select:"*"}, 	// data search and index
 			client: "guest", 		// default client 
 			track: false, 		// change journal tracking
@@ -96,11 +96,13 @@ var
 		dsAttrs: {		//< reserved for dataset attributes derived during config
 		}, */
 		
-		config: function (opts, cb) {
+		config: function (opts, cb) {  // callback cb(sql connection)
 			
 			if (opts) Copy(opts,DSVAR);
 			
+			Trace("CONFIG DB");
 			if (mysql = DSVAR.mysql) {
+				
 				mysql.pool = MYSQL.createPool(mysql.opts);
 
 				if (sqlThread = DSVAR.thread)
@@ -115,9 +117,11 @@ var
 							geometryKeys,
 							textKeys,
 							eachRecord,
+							withRecord,
 							context
 						]);
 
+						cb(sql);
 						/*
 						var Attrs  = DSVAR.dsAttrs;
 						sql.query(    // Defined default dataset attributes
@@ -178,7 +182,7 @@ var
 					});
 				
 				else
-					Trace("MISSING SQL thread() METHOD");
+					throw new Error("No SQL thread method");
 			}
 			
 			return DSVAR;
@@ -200,12 +204,12 @@ var
 					err = DSVAR.errors.noDB;
 				
 				this.query = function (q,args,cb) {
-					Log("DUMMY "+q);
+					Trace("NODB "+q);
 					if (cb)
-						cb(err,[]);
+						cb(err);
 					else
-					if ( args.constructor == Function)
-						args(err,[]);
+					if (args && args.constructor == Function)
+						args(err);
 
 					return This;
 				};
@@ -677,7 +681,6 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
 			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
@@ -743,7 +746,6 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,
 			table = me.table,
 			client = me.client,
 			sql = me.sql;
@@ -822,7 +824,6 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
 			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
@@ -864,7 +865,6 @@ DSVAR.DS.prototype = {
 		
 		var	
 			me = this,
-			//attr = DSVAR.dsAttrs[me.table] || DEFAULT.ATTRS,			
 			table = me.table,
 			ID = me.where.ID,
 			client = me.client,
@@ -1105,16 +1105,20 @@ function geometryKeys(table, keys) {
 function eachRecord(query, args, cb) {
 	this.query(query, args).on("result", cb);
 }
-		
+
+function withRecord(query, args, cb) {
+	this.query(query, args, function (err,recs) {
+		cb( err ? null : recs[0] );
+	});
+}
+
 function context(ctx,cb) {  // callback cb(context) with a DSVAR context
 	var 
 		sql = this,
 		context = {};
 	
-	for (var n in ctx) {
-		Trace(n);
+	for (var n in ctx) 
 			context[n] = new DSVAR.DS(sql, ctx[n]);  //new DSVAR.DS(sql, ctx[n], {table:n});
-	}
 	
 	if (cb) cb(context);
 }

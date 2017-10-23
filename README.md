@@ -68,8 +68,6 @@ supported using these ATTRIBUTES:
 	search: "field,field,..." 		// define fulltext search fields
 	track: true | [false] 		// enable search tracking
 	ag: "..." 		// aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
-	tx: "db.table" 	// translate table
-	geo: "field" 		// geometry field to return as geojson
 
 The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
 by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
