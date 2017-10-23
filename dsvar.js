@@ -77,24 +77,21 @@ var
 			noDB: new Error("no database connected")
 		},
 
-		defaultAttrs:	{ 					// default dataset attributes
-			sql: null, // sql connector
-			query: "",  // sql query
-			opts: null,	// ?-options to sql query
-			unsafeok: true,  // allow/disallow unsafe queries
-			trace: false,   // trace ?-compressed sql queries
-			journal: true,	// attempt journally of updates to jou.table database
-			ag: "", 		// default aggregator "" implies "least(?,1)"
-			index: {select:"*"}, 	// data search and index
-			client: "guest", 		// default client 
-			track: false, 		// change journal tracking
-			searchKeys: [], // fulltext searchable keys
-			jsonKeys: []  // json keys
+		attrs: {		//< reserved for dataset attributes derived during config
+			default:	{ 					// default dataset attributes
+				sql: null, // sql connector
+				query: "",  // sql query
+				opts: null,	// ?-options to sql query
+				unsafeok: true,  // allow/disallow unsafe queries
+				trace: false,   // trace ?-compressed sql queries
+				journal: true,	// attempt journally of updates to jou.table database
+				ag: "", 		// default aggregator "" implies "least(?,1)"
+				index: {select:"*"}, 	// data search and index
+				client: "guest", 		// default client 
+				track: false, 		// change journal tracking
+				search: ""  // key,key, .... fulltext keys to search
+			}		
 		},
-		
-		/*
-		dsAttrs: {		//< reserved for dataset attributes derived during config
-		}, */
 		
 		config: function (opts, cb) {  // callback cb(sql connection)
 			
@@ -108,8 +105,6 @@ var
 				if (sqlThread = DSVAR.thread)
 					sqlThread( function (sql) {
 						ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
-							indexEach,
-							eachTable,
 							getKeys,
 							getFields,
 							jsonKeys,
@@ -122,6 +117,22 @@ var
 						]);
 
 						cb(sql);
+						
+						var 
+							attrs = DSVAR.attrs,
+							dsFrom = "app",
+							dsKey = "Tables_in_" + dsFrom;
+	
+						sql.query(`SHOW TABLES FROM ${dsFrom}`, function (err, recs) {
+							recs.each( function (n,rec) {
+								sql.searchKeys( ds = dsFrom + "." + rec[dsKey], [], function (keys) {
+									var attr = attrs[ds] = {};
+									for (var key in attrs.default) attr[key] = attrs.default[key];
+									attr.search = keys.join(",");
+								});
+							});
+						});
+										   
 						/*
 						var Attrs  = DSVAR.dsAttrs;
 						sql.query(    // Defined default dataset attributes
@@ -257,40 +268,38 @@ var
 			
 			else 
 				cb( new dummyConnector( ) ); 
-		},
-
-		DS: function(sql,ats) {  // create dataset with given sql connector and attributes
-	
-			if (ats.constructor == String) ats = {table:ats};
-
-			if (ats.table) {  // default then override attributes			
-				var def = DSVAR.defaultAttrs; //DSVAR.dsAttrs[ats.table] || DEFAULT.ATTRS; //|| defs || {}; // defaults
-
-				for (var n in def)
-					switch (n) {
-						case "select":
-						case "update":
-						case "delete":
-						case "insert":
-							this.prototype[n] = def[n];
-							break;
-						default:	
-							this[n] = def[n];
-					}
-
-				this.sql = sql;  	// sql connector
-				this.err = null;	// default sql error response
-				
-				for (var n in ats) this[n] = ats[n];
-				
-				sql.searchKeys( this.table, this.searchKeys = []);	
-				sql.jsonKeys( this.table, this.jsonKeys = []);
-			}
-			
-			else
-				Trace(DSVAR.errors.noTable+"");
 		}
+
 	};
+
+function DATASET(sql,ats) {  // create dataset with given sql connector and attributes
+
+	if (ats.constructor == String) ats = {table:ats};
+
+	if (ats.table) {  // default then override attributes			
+		var attrs = DSVAR.attrs[ats.table] || DSVAR.attrs.default; 
+
+		for (var n in attrs)
+			switch (n) {
+				case "select":
+				case "update":
+				case "delete":
+				case "insert":
+					this.prototype[n] = attrs[n];
+					break;
+				default:	
+					this[n] = attrs[n];
+			}
+
+		this.sql = sql;  	// sql connector
+		this.err = null;	// default sql error response
+
+		for (var n in ats) this[n] = ats[n];
+	}
+
+	else
+		Trace(DSVAR.errors.noTable+"");
+}
 
 /*
 CRUD interface ds.rec = req where req is an
@@ -302,7 +311,7 @@ CRUD interface ds.rec = req where req is an
 		"X": dataset CRUD (ds.rec = ds.data) X=select,update,delete,create,execute 
 		"lock.X": lock/unlock record for dataset CRUD
 */
-DSVAR.DS.prototype = {
+DATASET.prototype = {
 	
 	x: function xquery(opt,key,buf) {  // query builder extends me.query and me.opts
 		
@@ -365,16 +374,20 @@ DSVAR.DS.prototype = {
 				case "IN":
 				case "WITH":
 				
-					me.query += `,MATCH(${me.searchKeys.join(",")}) AGAINST('${opt}' ${key}) AS Score`;
-					me.having = me.score ? "Score>"+me.score : ["Score"];
-					me.searching = opt;
+					if (me.search) {
+						me.query += `,MATCH(${me.search}) AGAINST('${opt}' ${key}) AS Score`;
+						me.having = me.score ? "Score>"+me.score : ["Score"];
+						me.searching = opt;
+					}
 					break;
 				
 				case "HAS":
 				
-					me.query += `,instr(concat(${me.searchKeys.join(",")}),'${opt}') AS Score`;
-					me.having = me.score ? "Score>"+me.score : ["Score"];
-					me.searching = opt;
+					if (me.search) {
+						me.query += `,instr(concat(${me.search}),'${opt}') AS Score`;
+						me.having = me.score ? "Score>"+me.score : ["Score"];
+						me.searching = opt;
+					}
 					break;
 
 				case "SELECT":
@@ -517,7 +530,7 @@ DSVAR.DS.prototype = {
 											}
 											break;
 											
-										case Object:  // using searchKeys query e.g. x={nlp:pattern}
+										case Object:  // using search query e.g. x={nlp:pattern}
 											
 											var fld = n.Escape();
 											if (pat = test.nlp) 
@@ -617,10 +630,6 @@ DSVAR.DS.prototype = {
 									delete opt[n];
 								}
 							*/
-							me.jsonKeys.each( function (n,key) {
-								if ( key in opt ) 
-									opt[key] = JSON.stringify(opt[key]);
-							});
 							
 							me.opts.push(opt);
 							break;
@@ -1048,58 +1057,38 @@ DSVAR.DS.prototype = {
 	
 }
 
-function indexEach(query, idx, cb) {	
-	this.query( query, function (err,recs) {
+function getKeys(table, type, keys, cb) {
+	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, function (err, recs) {
 		recs.each( function (n,rec) {
-			cb( rec[idx] );
+			keys.push(rec.Column_name);
 		});
+		cb(keys);
 	});
 }
 
-function indexList(query, idx, rtns, cb) {
-	
-	this.query(	query, function (err,recs) { 
-		recs.each( function (n,rec) {  
-			rtns.push(rec[idx]); 
+function getFields(table, type, keys, cb) {
+	this.query(`SHOW FIELDS FROM ${table} WHERE ?`,{Type:type}, function (err, recs) {
+		recs.each( function (n, rec) {
+			keys.push(rec.Field);
 		});
-
-		cb(rtns);
-	});
-		
-}								
-
-function eachTable(from, cb) {
-	this.indexEach( `SHOW TABLES FROM ${from}`, `Tables_in_${from}`, cb);
-}
-
-function getKeys(table, type, keys) {
-	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type})
-	.on("result", function (rec) {
-		keys.push(rec.Column_name);
+		cb(keys);
 	});
 }
 
-function getFields(table, type, keys) {
-	this.query(`SHOW FIELDS FROM ${table} WHERE ?`,{Type:type})
-	.on("result", function (rec) {
-		keys.push(rec.Field);
-	});
+function jsonKeys(table, keys, cb) {
+	this.getFields(table, "json", keys, cb);
 }
 
-function jsonKeys(table, keys) {
-	this.getFields(table, "json", keys);
+function textKeys(table, keys, cb) {
+	this.getFields(table, "mediumtext", keys, cb);
 }
 
-function textKeys(table, keys) {
-	this.getFields(table, "mediumtext", keys);
+function searchKeys(table, keys, cb) {
+	this.getKeys(table, "fulltext", keys, cb);
 }
 
-function searchKeys(table, keys) {
-	this.getKeys(table, "fulltext", keys);
-}
-
-function geometryKeys(table, keys) {
-	this.getFields(table, "geometry", keys);
+function geometryKeys(table, keys, cb) {
+	this.getFields(table, "geometry", keys, cb);
 }
 
 function eachRecord(query, args, cb) {
@@ -1112,15 +1101,15 @@ function withRecord(query, args, cb) {
 	});
 }
 
-function context(ctx,cb) {  // callback cb(context) with a DSVAR context
+function context(ctx,cb) {  // callback cb(dsctx) with a DSVAR context
 	var 
 		sql = this,
-		context = {};
+		dsctx = {};
 	
-	for (var n in ctx) 
-			context[n] = new DSVAR.DS(sql, ctx[n]);  //new DSVAR.DS(sql, ctx[n], {table:n});
-	
-	if (cb) cb(context);
+	Each(ctx, function (dskey, dsats) {
+		dsctx[dskey] = new DATASET( sql, dsats );
+	});
+	cb(dsctx);
 }
 
 function Trace(msg,sql) {
