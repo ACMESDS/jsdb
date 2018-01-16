@@ -1,19 +1,24 @@
 {
   "name": "dsvar",
   "version": "1.0.0",
-  "description": "provide database agnostic JS dataset var interface",
+  "description": "/** @class DSVAR  \t[SourceForge](https://sourceforge.net)  \t[github](https://github.com/acmesds/dsvar.git)  \t[geointapps](https://git.geointapps.org/acmesds/dsvar) \t[gitlab](https://gitlab.weat.nga.ic.gov/acmesds/dsvar.git)",
   "main": "dsvar.js",
+  "dependencies": {
+    "enum": "^1.0.0",
+    "mysql": "^2.15.0"
+  },
+  "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git@git.geointapps.org/acmesds:dsvar"
+    "url": "git+https://github.com/ACMESDS/dsvar.git"
   },
-  "author": "acme",
+  "author": "",
   "license": "ISC",
-  "dependencies": {
-    "expectation-maximization": "^1.5.0",
-    "readable-stream": "^2.2.3"
-  }
+  "bugs": {
+    "url": "https://github.com/ACMESDS/dsvar/issues"
+  },
+  "homepage": "https://github.com/ACMESDS/dsvar#readme"
 }

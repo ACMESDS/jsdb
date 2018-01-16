@@ -74,7 +74,13 @@ var
 			unsupportedQuery: new Error("query not supported"),
 			invalidQuery: new Error("query invalid"),
 			noTable: new Error("dataset definition missing table name"),
-			noDB: new Error("no database connected")
+			noDB: new Error("no database connected"),
+			noLock: new Error("record lock ID missing"),
+			isUnlocked: new Error("record never locked"),
+			failLock: new Error("record locking failed"),
+			isLocked: new Error("record already locked"),
+			noExe: new Error("record execute undefined"),
+			noRecord: new Error("no record found")
 		},
 
 		attrs: {		//< reserved for dataset attributes derived during config
@@ -97,7 +103,8 @@ var
 			
 			if (opts) Copy(opts,DSVAR);
 			
-			Trace("CONFIG DB");
+			Trace("CONFIG DSVAR");
+			
 			if (mysql = DSVAR.mysql) {
 				
 				mysql.pool = MYSQL.createPool(mysql.opts);
@@ -116,6 +123,8 @@ var
 							context
 						]);
 
+						sql.query("DELETE FROM openv.locks");
+						
 						cb(sql);
 						
 						var 
@@ -193,7 +202,7 @@ var
 					});
 				
 				else
-					throw new Error("No SQL thread method");
+					throw new Error("SQL thread method was not configured");
 			}
 			
 			return DSVAR;
@@ -785,7 +794,8 @@ DATASET.prototype = {
 				case "clone": 
 					var rtn = [];
 					sql.query(me.query, me.opts, function (err,recs) {	
-						if (err) return req( err, me );
+						if (err) 
+							return req( err, me );
 						
 						recs.each(function (n,rec) {
 							rtn.push( new Object( rec ) );
@@ -806,7 +816,7 @@ DATASET.prototype = {
 				default:  
 					sql.query(me.query, me.opts, function (err,recs) {
 						
-						if (me.track && me.searching && recs)
+						if (me.track && me.searching && recs)  // track searches if tracking
 							sql.query(
 								"INSERT INTO openv.tracks SET ? ON DUPLICATE KEY UPDATE Searched=Searched+1,Returned=Returned+?", [
 									{	Client: client,
@@ -883,11 +893,11 @@ DATASET.prototype = {
 		
 		if (!req.length) req = [{}];   // force at least one insert attempt
 		
-		req.each(function (n,rec) {
+		req.each(function (n,rec) { // insert each record
 			
 			sql.query(
-				me.query = Each(rec)
-					? "INSERT INTO ?? VALUE ()"
+				me.query = Each(rec)  // trap empty records
+					? "INSERT INTO ?? VALUE ()"  
 					:  "INSERT INTO ?? SET ?" ,
 
 				[table,rec], 
@@ -924,41 +934,48 @@ DATASET.prototype = {
 			lockID = {Lock:`${me.table}.${ID}`, Client:me.client};
 		
 		if (ID)
-			sql.query(
+			sql.query(  // attempt to unlock a locked record
 				"DELETE FROM openv.locks WHERE least(?)", 
 				lockID, 
 				function (err,info) {
 
-				if (info.affectedRows) {
-					cb();
-					sql.query("COMMIT");  // commit queues transaction
-				}
+				if (err)
+					me.res( DSVAR.errors.failLock );
 
 				else
-				if (lockcb)
+				if (info.affectedRows) {  // unlocked so commit queued queries
+					cb();
+					sql.query("COMMIT");  
+				}
+
+				else 
+				if (lockcb)  // attempt to lock this record
 					sql.query(
 						"INSERT INTO openv.locks SET ?",
 						lockID, 
 						function (err,info) {
 
 						if (err)
-							me.res( "record already locked by another" );
+							me.res( DSVAR.errors.isLocked );
 
 						else
-							sql.query("START TRANSACTION", function (err) {  // queue this transaction
+							sql.query( "START TRANSACTION", function (err) {  // queue this transaction
 								lockcb();
 							});
 					});	
 
-				else
-					me.res( "record must be locked" );
+				else  // record was never locked
+					me.res( DSVAR.errors.isUnlocked );
+
 			});
+		
 		else
-			me.res("missing record ID");
+			me.res( DSVAR.errors.noLock );
 	},
 
 	set rec(req) { 									// crud interface
-		var me = this, 
+		var 
+			me = this, 
 			res = me.res;
 		
 		if (req) 
@@ -982,7 +999,7 @@ DATASET.prototype = {
 					me.select(req,res);
 					break;
 					
-				default:
+				case String:
 				
 					if (me.trace) Trace(
 						`${req.toUpperCase()} ${me.table} FOR ${me.client}`
@@ -991,50 +1008,49 @@ DATASET.prototype = {
 					switch (req) {
 						case "lock.select":
 
-							me.rec = function (recs) {
+							me.rec = function (recs) {  // get records
 
 								if (recs.constructor == Error) 
-									res( recs+"" );
+									res( recs );
 								
 								else
 								if (rec = recs[0]) 
-									me.unlock(rec.ID, function () {
+									me.unlock(rec.ID, function () {  // unlocked
 										res( rec );
-									}, function () {
+									}, function () {  // locked
 										res( rec );
 									});
 								
 								else
-									res( "no record found" );
+									res( DSVAR.errors.noRecord );
 								
 							};
-							
 							break;
 						
 						case "lock.delete":
 							
-							me.unlock(me.where.ID, function () {
+							me.unlock(me.where.ID, function () {  // delete if unlocked
 								me.rec = null;
 							});
 							break;
 													
 						case "lock.insert":
 
-							me.unlock(me.where.ID, function () {
+							me.unlock(me.where.ID, function () { // insert if unlocked
 								me.rec = [me.data];
 							});
 							break;
 							
 						case "lock.update":
 
-							me.unlock(me.where.ID, function () {
+							me.unlock(me.where.ID, function () {  // update if unlocked
 								me.rec = me.data;
 							});
 							break;
 							
 						case "lock.execute":
 							
-							res( "execute undefined" );
+							res( DSVAR.errors.noExe );
 							break;
 
 						case "select": me.rec = me.res; break;
