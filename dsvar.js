@@ -111,6 +111,7 @@ var
 
 				if (sqlThread = DSVAR.thread)
 					sqlThread( function (sql) {
+						
 						ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
 							getKeys,
 							getFields,
@@ -256,24 +257,25 @@ var
 				if (mysql.pool)
 					mysql.pool.getConnection(function (err,sql) {
 						if (err) {
-							Log( err, {
+							Log({
+								sqlpool: err,
 								total: mysql.pool._allConnections.length ,
 								free: mysql.pool._freeConnections.length,
-								queue: mysql.pool._connectionQueue.length 
+								queue: mysql.pool._connectionQueue.length
 							});
 
 							/*mysql.pool.end( function (err) {
 								mysql.pool = MYSQL.createPool(mysql.opts);
 							}); */
 
-							cb( dummyConnector(err) );
+							cb( new dummyConnector(err) );
 						}
 						else 
 							cb( sql );
 					});
 
 				else
-					cb( MYSQL.createConnection(mysql.opts) );
+					cb( MYSQL.createConnection(mysql.opts) || new dummyConnector( ) );
 			
 			else 
 				cb( new dummyConnector( ) ); 
