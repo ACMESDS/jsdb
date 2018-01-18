@@ -121,7 +121,9 @@ var
 							textKeys,
 							eachRecord,
 							withRecord,
-							context
+							context,
+							getRecord,
+							getRecords
 						]);
 
 						sql.query("DELETE FROM openv.locks");
@@ -1117,6 +1119,23 @@ function withRecord(query, args, cb) {
 	this.query(query, args, function (err,recs) {
 		cb( err ? null : recs[0] );
 	});
+}
+
+function getRecord(trace, query, args, cb) {
+	var q = this.query(query, args);
+	
+	if (trace) Trace( q.sql + " " + trace);
+	
+	if (cb) q.on("result", cb);
+	return q;
+}
+
+function getRecords(trace, query, args, cb) {
+	var q = this.query(query, args, cb);
+	
+	if (trace) Trace( q.sql + " " + trace);
+	
+	return q;
 }
 
 function context(ctx,cb) {  // callback cb(dsctx) with a DSVAR context
