@@ -119,7 +119,7 @@ var
 							searchKeys,
 							geometryKeys,
 							textKeys,
-							get,
+							first,
 							context,
 							each,
 							all
@@ -1115,7 +1115,7 @@ function eachRecord(query, args, cb) {
 	this.query(query, args).on("result", cb);
 } */
 
-function get(trace, query, args, cb) {
+function first(trace, query, args, cb) {
 	var q = this.query(query, args, function (err,recs) {
 		cb( err ? null : recs[0] );
 	});

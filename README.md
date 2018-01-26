@@ -78,6 +78,8 @@ or group recording according to its index.browse (file navigation) or index.pivo
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
 was configured), and willjournal the change when jounalling is enabled.
 
+DSVAR will also add other useful methods to the standard sql connector.
+
 ## Databases
 
 openv.attrs   Defines default ATTRIBUTES on startup.  
