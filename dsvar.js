@@ -119,11 +119,10 @@ var
 							searchKeys,
 							geometryKeys,
 							textKeys,
-							eachRecord,
-							withRecord,
+							get,
 							context,
-							getRecord,
-							getRecords
+							each,
+							all
 						]);
 
 						sql.query("DELETE FROM openv.locks");
@@ -1111,30 +1110,30 @@ function geometryKeys(table, keys, cb) {
 	this.getFields(table, "geometry", keys, cb);
 }
 
+/*
 function eachRecord(query, args, cb) {
 	this.query(query, args).on("result", cb);
-}
+} */
 
-function withRecord(query, args, cb) {
-	this.query(query, args, function (err,recs) {
+function get(trace, query, args, cb) {
+	var q = this.query(query, args, function (err,recs) {
 		cb( err ? null : recs[0] );
 	});
-}
-
-function getRecord(trace, query, args, cb) {
-	var q = this.query(query, args);
-	
-	if (trace) Trace( q.sql + " " + trace);
-	
-	if (cb) q.on("result", cb);
+	if (trace) Trace( trace + " " + q.sql);	
 	return q;
 }
 
-function getRecords(trace, query, args, cb) {
-	var q = this.query(query, args, cb);
-	
-	if (trace) Trace( q.sql + " " + trace);
-	
+function each(trace, query, args, cb) {
+	var q = this.query(query, args).on("result", cb);
+	if (trace) Trace( trace + " " + q.sql);	
+	return q;
+}
+
+function all(trace, query, args, cb) {
+	var q = this.query(query, args, function (err,recs) {
+		cb( err ? null : recs, err);
+	});
+	if (trace) Trace( trace + " " + q.sql);	
 	return q;
 }
 
