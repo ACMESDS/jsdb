@@ -1026,7 +1026,7 @@ function geometryKeys(table, keys, cb) {
 	this.getFields(table, "geometry", keys, cb);
 }
 
-function first(trace, query, args, cb) {
+function first(trace, query, args, cb) {  // callback cb(rec) or cb(null) if error
 	var q = query 
 		? this.query(query, args, function (err,recs) {
 				cb( err ? null : recs[0] );
@@ -1038,7 +1038,7 @@ function first(trace, query, args, cb) {
 	return q;
 }
 
-function each(trace, query, args, cb) {
+function each(trace, query, args, cb) { // callback cb(rec) with each rec
 	var q = query 
 		? this.query(query, args).on("result", cb)
 	
@@ -1048,7 +1048,7 @@ function each(trace, query, args, cb) {
 	return q;
 }
 
-function all(trace, query, args, cb) {
+function all(trace, query, args, cb) { // callback cb(recs) if no error
 	var q = query
 		? this.query(query, args, function (err,recs) {
 				if (!err) if(cb) cb( recs );
