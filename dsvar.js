@@ -13,58 +13,6 @@ var 											// nodejs
 var												// 3rd party bindings
 	MYSQL = require("mysql");
 
-var 											// totem bindings
-	ENUM = require("enum").extend({
-		String: [
-			function Escape() {
-				var q = "`";
-				return q + escape(this) + q;
-			}
-		],
-				
-		Array: [
-			function Escape(slash,cb) {
-				var q = "`";
-				
-				if (cb) {
-					var rtn = [];
-					this.each(function (n,el) {
-						rtn.push( cb(el) );
-					});
-					return rtn.join(slash);
-				}
-				else						
-					return  q + this.join(slash ? `${q}${slash}${q}` : `${q},${q}`) + q;
-			}
-		]
-	}),
-	Copy = ENUM.copy,
-	Each = ENUM.each,
-	Log = console.log;
-
-/*
-var 											// globals
-	DEFAULT = {
-		ATTRS:	{ 					// default dataset attributes
-			sql: null, // sql connector
-			query: "",  // sql query
-			opts: null,	// ?-options to sql query
-			unsafeok: true,  // allow/disallow unsafe queries
-			trace: false,   // trace ?-compressed sql queries
-			journal: true,	// attempt journally of updates to jou.table database
-			ag: "", 		// default aggregator
-			index: {select:"*"}, 	// data search and index
-			client: "guest", 		// default client 
-			track: false, 		// change journal tracking
-			//geo: "", 	// geojson selector = key as key,key as key,...
-			searchKeys: "", // fulltext match key,key,...
-			doc: "", 	// table description
-			jsonKeys: [] 	// json vars = key:default
-		}
-		// {tx: "",trace:true,unsafeok:false,journal:false,doc:"",track:0,geo:"",searchKeys:"",json:{}}
-	};
-*/
-
 var
 	DSVAR = module.exports = {
 		
@@ -109,102 +57,103 @@ var
 				
 				mysql.pool = MYSQL.createPool(mysql.opts);
 
-				if (sqlThread = DSVAR.thread)
-					sqlThread( function (sql) {
-						
-						ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
-							getKeys,
-							getFields,
-							jsonKeys,
-							searchKeys,
-							geometryKeys,
-							textKeys,
-							first,
-							context,
-							each,
-							all
-						]);
+				sqlThread( function (sql) {
 
-						sql.query("DELETE FROM openv.locks");
-						
-						cb(sql);
-						
-						var 
-							attrs = DSVAR.attrs,
-							dsFrom = "app",
-							dsKey = "Tables_in_" + dsFrom;
-	
-						sql.query(`SHOW TABLES FROM ${dsFrom}`, function (err, recs) {
-							recs.each( function (n,rec) {
-								sql.searchKeys( ds = dsFrom + "." + rec[dsKey], [], function (keys) {
-									var attr = attrs[ds] = {};
-									for (var key in attrs.default) attr[key] = attrs.default[key];
-									attr.search = keys.join(",");
-								});
+					ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
+						getKeys,
+						getFields,
+						jsonKeys,
+						searchKeys,
+						geometryKeys,
+						textKeys,
+						first,
+						context,
+						each,
+						all
+					]);
+
+					sql.query("DELETE FROM openv.locks");
+
+					//cb(sql);
+
+					var 
+						attrs = DSVAR.attrs,
+						dsFrom = "app",
+						dsKey = "Tables_in_" + dsFrom;
+
+					sql.query(`SHOW TABLES FROM ${dsFrom}`, function (err, recs) {
+						recs.each( function (n,rec) {
+							sql.searchKeys( ds = dsFrom + "." + rec[dsKey], [], function (keys) {
+								var attr = attrs[ds] = {};
+								for (var key in attrs.default) attr[key] = attrs.default[key];
+								attr.search = keys.join(",");
 							});
 						});
-										   
-						/*
-						var Attrs  = DSVAR.dsAttrs;
-						sql.query(    // Defined default dataset attributes
-							"SELECT * FROM openv.attrs",
-							function (err,attrs) {
-
-							if (err) 
-								Log(err);
-
-							else
-								attrs.each(function (n,attr) {  // defaults
-									var Attr = Attrs[attr.Dataset] = Copy({
-										journal: attr.Journal,
-										//tx: attr.Tx,
-										flatten: attr.Flatten,
-										doc: attr.Special,
-										unsafeok: attr.Unsafeok,
-										track: attr.Track,
-										trace: attr.Trace
-									}, Copy( DEFAULT.ATTRS, {} ) );
-									
-									//console.log([attr.Dataset, Attr]);
-								});
-
-							sql.eachTable( "app", function (tab) { // get fulltext searchable and geometry fields in tables
-								var 
-									Attr = Attrs[tab],
-									ds = `app.${tab}`;
-
-								if ( !Attr )
-									Attr = Attrs[tab] = new Object(DEFAULT.ATTRS);
-
-								sql.searchKeys( ds, function (keys) {
-									Attr.searchKeys = keys.Escape();
-								});
-
-								sql.geometryKeys( ds, function (keys) {
-									var q = "`";
-									Attr.geo = keys.Escape(",", function (key) { 
-										return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
-									});
-								}); 
-							});
-
-							sql.query(   // journal all moderated datasets 
-								"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
-							.on("result", function (mon) { 
-								var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
-								Attr.journal = 1;
-							});	
-
-							sql.release();  // begonne with thee	
-								
-							// callback now that dsvar environment has been defined
-							if (cb) cb(sql);
-						});
-						*/
+						
+						if (cb) cb(sql);
+						else
+							sql.release();
 					});
+					
+					/*
+					var Attrs  = DSVAR.dsAttrs;
+					sql.query(    // Defined default dataset attributes
+						"SELECT * FROM openv.attrs",
+						function (err,attrs) {
+
+						if (err) 
+							Log(err);
+
+						else
+							attrs.each(function (n,attr) {  // defaults
+								var Attr = Attrs[attr.Dataset] = Copy({
+									journal: attr.Journal,
+									//tx: attr.Tx,
+									flatten: attr.Flatten,
+									doc: attr.Special,
+									unsafeok: attr.Unsafeok,
+									track: attr.Track,
+									trace: attr.Trace
+								}, Copy( DEFAULT.ATTRS, {} ) );
+
+								//console.log([attr.Dataset, Attr]);
+							});
+
+						sql.eachTable( "app", function (tab) { // get fulltext searchable and geometry fields in tables
+							var 
+								Attr = Attrs[tab],
+								ds = `app.${tab}`;
+
+							if ( !Attr )
+								Attr = Attrs[tab] = new Object(DEFAULT.ATTRS);
+
+							sql.searchKeys( ds, function (keys) {
+								Attr.searchKeys = keys.Escape();
+							});
+
+							sql.geometryKeys( ds, function (keys) {
+								var q = "`";
+								Attr.geo = keys.Escape(",", function (key) { 
+									return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
+								});
+							}); 
+						});
+
+						sql.query(   // journal all moderated datasets 
+							"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
+						.on("result", function (mon) { 
+							var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
+							Attr.journal = 1;
+						});	
+
+						sql.release();  // begonne with thee	
+
+						// callback now that dsvar environment has been defined
+						if (cb) cb(sql);
+					});
+					*/
+				});
 				
-				else
-					throw new Error("SQL thread method was not configured");
 			}
 			
 			return DSVAR;
@@ -218,71 +167,38 @@ var
 			 }
 		},
 		
-		thread: function (cb) {  // callback cb(sql) with a sql connection
-
-			function dummyConnector() {
-				var
-					This = this,
-					err = DSVAR.errors.noDB;
-				
-				this.query = function (q,args,cb) {
-					Trace("NODB "+q);
-					if (cb)
-						cb(err);
-					else
-					if (args && args.constructor == Function)
-						args(err);
-
-					return This;
-				};
-				
-				this.on = function (ev, cb) {
-					return This;
-				};
-				
-				this.sql = "DUMMY SQL CONNECTOR";
-				
-				this.release = function () {
-					return This;
-				};
-				
-				this.createPool = function (opts) {
-					return null;
-				};
-			}
-
-			var 
-				mysql = DSVAR.mysql;
-
-			if (mysql)
-				if (mysql.pool)
-					mysql.pool.getConnection(function (err,sql) {
-						if (err) {
-							Log({
-								sqlpool: err,
-								total: mysql.pool._allConnections.length ,
-								free: mysql.pool._freeConnections.length,
-								queue: mysql.pool._connectionQueue.length
-							});
-
-							/*mysql.pool.end( function (err) {
-								mysql.pool = MYSQL.createPool(mysql.opts);
-							}); */
-
-							cb( new dummyConnector(err) );
-						}
-						else 
-							cb( sql );
-					});
-
-				else
-					cb( MYSQL.createConnection(mysql.opts) || new dummyConnector( ) );
-			
-			else 
-				cb( new dummyConnector( ) ); 
-		}
+		thread: sqlThread
 
 	};
+
+var 											// totem bindings
+	ENUM = require("enum").extend({
+		String: [
+			function Escape() {
+				var q = "`";
+				return q + escape(this) + q;
+			}
+		],
+				
+		Array: [
+			function Escape(slash,cb) {
+				var q = "`";
+				
+				if (cb) {
+					var rtn = [];
+					this.each(function (n,el) {
+						rtn.push( cb(el) );
+					});
+					return rtn.join(slash);
+				}
+				else						
+					return  q + this.join(slash ? `${q}${slash}${q}` : `${q},${q}`) + q;
+			}
+		]
+	}),
+	Copy = ENUM.copy,
+	Each = ENUM.each,
+	Log = console.log;
 
 function DATASET(sql,ats) {  // create dataset with given sql connector and attributes
 
@@ -1110,29 +1026,36 @@ function geometryKeys(table, keys, cb) {
 	this.getFields(table, "geometry", keys, cb);
 }
 
-/*
-function eachRecord(query, args, cb) {
-	this.query(query, args).on("result", cb);
-} */
-
 function first(trace, query, args, cb) {
-	var q = this.query(query, args, function (err,recs) {
-		cb( err ? null : recs[0] );
-	});
+	var q = query 
+		? this.query(query, args, function (err,recs) {
+				cb( err ? null : recs[0] );
+			})
+	
+		: { sql: "IGNORE", on: function (){} };
+	
 	if (trace) Trace( trace + " " + q.sql);	
 	return q;
 }
 
 function each(trace, query, args, cb) {
-	var q = this.query(query, args).on("result", cb);
+	var q = query 
+		? this.query(query, args).on("result", cb)
+	
+		: { sql: "IGNORE", on: function (){} };
+	
 	if (trace) Trace( trace + " " + q.sql);	
 	return q;
 }
 
 function all(trace, query, args, cb) {
-	var q = this.query(query, args, function (err,recs) {
-		cb( err ? null : recs, err);
-	});
+	var q = query
+		? this.query(query, args, function (err,recs) {
+				if (!err) if(cb) cb( recs );
+			})
+	
+		: { sql: "IGNORE", on: function (){} };
+	
 	if (trace) Trace( trace + " " + q.sql);	
 	return q;
 }
@@ -1146,6 +1069,70 @@ function context(ctx,cb) {  // callback cb(dsctx) with a DSVAR context
 		dsctx[dskey] = new DATASET( sql, dsats );
 	});
 	cb(dsctx);
+}
+
+function sqlThread(cb) {  // callback cb(sql) with a sql connection
+
+	function dummyConnector() {
+		var
+			This = this,
+			err = DSVAR.errors.noDB;
+
+		this.query = function (q,args,cb) {
+			Trace("NODB "+q);
+			if (cb)
+				cb(err);
+			else
+			if (args && args.constructor == Function)
+				args(err);
+
+			return This;
+		};
+
+		this.on = function (ev, cb) {
+			return This;
+		};
+
+		this.sql = "DUMMY SQL CONNECTOR";
+
+		this.release = function () {
+			return This;
+		};
+
+		this.createPool = function (opts) {
+			return null;
+		};
+	}
+
+	var 
+		mysql = DSVAR.mysql;
+
+	if (mysql)
+		if ( mysql.pool) 
+			mysql.pool.getConnection( function (err,sql) {
+				if (err) {
+					Log({
+						sqlpool: err,
+						total: mysql.pool._allConnections.length ,
+						free: mysql.pool._freeConnections.length,
+						queue: mysql.pool._connectionQueue.length
+					});
+
+					/*mysql.pool.end( function (err) {
+						mysql.pool = MYSQL.createPool(mysql.opts);
+					}); */
+
+					cb( new dummyConnector(err) );
+				}
+				else 
+					cb( sql );
+			});
+	
+		else
+			cb( MYSQL.createConnection(mysql.opts) || new dummyConnector( ) );
+
+	else 
+		cb( new dummyConnector( ) ); 
 }
 
 function Trace(msg,sql) {
