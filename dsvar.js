@@ -1102,6 +1102,8 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 function cache( opts, cb ) {
 	var sql = this;
 	
+	cb |= function () {};
+	
 	sql.first( 
 		"CACHE", 
 		"SELECT Results FROM app.cache WHERE least(?,1) LIMIT 1", 
