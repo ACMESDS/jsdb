@@ -1099,38 +1099,63 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		cb( new dummyConnector( ) ); 
 }
 
+/*
+Implements generic cache.  Looks for cache given opts.key and, if found, returns cached results on cb(results);
+otherwse, if not found, returns results via opts.make(fetchers, opts.parms, cb).  If cacheing fails, then opts.default 
+is returned.  The returned results will always contain a results.ID for its cached ID.  If a opts.default is not provided,
+then the cb callback in not made.
+*/
+
 function cache( opts, cb ) {
 	var sql = this;
 	
-	cb |= function () {};
-	
-	sql.first( 
-		"CACHE", 
-		"SELECT Results FROM app.cache WHERE least(?,1) LIMIT 1", 
-		[ opts.key ], function (rec) {
-		
-		if (rec) 
-			try {
-				cb( JSON.parse(rec.Results) );
-			}
-			catch (err) {
-				cb( opts.default );
-			}
+	if ( opts.key )
+		sql.first( 
+			"", 
+			"SELECT Results FROM app.cache WHERE least(?,1) LIMIT 1", 
+			[ opts.key ], function (rec) {
 
-		else
-		if ( opts.make )
-			opts.make( DSVAR.fetchers, opts.parms, function (res) {
-				sql.query( 
-					"INSERT INTO app.cache SET Added=now(), Results=?, ?", 
-					[ JSON.stringify(res || opts.default), opts.key ], 
-					function (err) {
-						cb( res );
+			if (rec) 
+				try {
+					cb( JSON.parse(rec.Results) );
+				}
+				catch (err) {
+					if ( opts.default )
+						cb( Copy(opts.default, {ID: null} ) );
+				}
+
+			else
+			if ( opts.make && opts.parms ) 
+				opts.make( DSVAR.fetchers, opts.parms, function (res) {
+
+					if (res) 
+						sql.query( 
+							"INSERT INTO app.cache SET Added=now(), Results=?, ?", 
+							[ JSON.stringify(res || opts.default), opts.key ], 
+							function (err, info) {
+								if (err) {
+									if ( opts.default ) 
+										cb( Copy(opts.default, {ID: null}) );
+								}
+
+								else 
+									cb( Copy(res, {ID: info.insertId}) );
+						});
+
+					else 
+					if ( opts.default )
+						cb( Copy(opts.default, {ID: null}) );
 				});
-			});
 
-		else
-			cb( opts.default );
-	});
+			else
+			if ( opts.default )
+				cb( Copy(opts.default, {ID: null}) );
+		});
+	
+	else
+	if ( opts.default )
+		cb( Copy({ID: null}, opts.default) );
+	
 }
 
 //============== Build insert records
