@@ -31,6 +31,8 @@ var
 			noRecord: new Error("no record found")
 		},
 
+		fetchers: null, 	//< defined by config 
+		
 		attrs: {		//< reserved for dataset attributes derived during config
 			default:	{ 					// default dataset attributes
 				sql: null, // sql connector
@@ -60,16 +62,35 @@ var
 				sqlThread( function (sql) {
 
 					ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
+						// key getters
 						getKeys,
 						getFields,
 						jsonKeys,
 						searchKeys,
 						geometryKeys,
 						textKeys,
+						
+						// record getters
 						first,
 						context,
 						each,
-						all
+						all,
+						
+						// misc
+						cache,
+						flattenCatalog,
+						
+						// bulk insert records
+						beginBulk,
+						endBulk,
+						
+						// job processing
+						selectJob,
+						deleteJob,
+						updateJob,
+						insertJob,
+						executeJob
+						
 					]);
 
 					sql.query("DELETE FROM openv.locks");
@@ -95,63 +116,6 @@ var
 							sql.release();
 					});
 					
-					/*
-					var Attrs  = DSVAR.dsAttrs;
-					sql.query(    // Defined default dataset attributes
-						"SELECT * FROM openv.attrs",
-						function (err,attrs) {
-
-						if (err) 
-							Log(err);
-
-						else
-							attrs.each(function (n,attr) {  // defaults
-								var Attr = Attrs[attr.Dataset] = Copy({
-									journal: attr.Journal,
-									//tx: attr.Tx,
-									flatten: attr.Flatten,
-									doc: attr.Special,
-									unsafeok: attr.Unsafeok,
-									track: attr.Track,
-									trace: attr.Trace
-								}, Copy( DEFAULT.ATTRS, {} ) );
-
-								//console.log([attr.Dataset, Attr]);
-							});
-
-						sql.eachTable( "app", function (tab) { // get fulltext searchable and geometry fields in tables
-							var 
-								Attr = Attrs[tab],
-								ds = `app.${tab}`;
-
-							if ( !Attr )
-								Attr = Attrs[tab] = new Object(DEFAULT.ATTRS);
-
-							sql.searchKeys( ds, function (keys) {
-								Attr.searchKeys = keys.Escape();
-							});
-
-							sql.geometryKeys( ds, function (keys) {
-								var q = "`";
-								Attr.geo = keys.Escape(",", function (key) { 
-									return `st_asgeojson(${q}${key}${q}) AS j${key}`; 
-								});
-							}); 
-						});
-
-						sql.query(   // journal all moderated datasets 
-							"SELECT Dataset FROM openv.hawks GROUP BY Dataset")
-						.on("result", function (mon) { 
-							var Attr = Attrs[mon.Dataset] || DEFULT.ATTRS;
-							Attr.journal = 1;
-						});	
-
-						sql.release();  // begonne with thee	
-
-						// callback now that dsvar environment has been defined
-						if (cb) cb(sql);
-					});
-					*/
 				});
 				
 			}
@@ -1133,6 +1097,418 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 
 	else 
 		cb( new dummyConnector( ) ); 
+}
+
+function cache( opts, cb ) {
+	var sql = this;
+	
+	sql.first( 
+		"CACHE", 
+		"SELECT Results FROM app.cache WHERE least(?,1) LIMIT 1", 
+		[ opts.key ], function (rec) {
+		
+		if (rec) 
+			try {
+				cb( JSON.parse(rec.Results) );
+			}
+			catch (err) {
+				cb( opts.default );
+			}
+
+		else
+		if ( opts.make )
+			opts.make( DSVAR.fetchers, opts.parms, function (res) {
+				sql.query( 
+					"INSERT INTO app.cache SET Added=now(), Results=?, ?", 
+					[ JSON.stringify(res || opts.default), opts.key ], 
+					function (err) {
+						cb( res );
+				});
+			});
+
+		else
+			cb( opts.default );
+	});
+}
+
+//============== Build insert records
+
+function beginBulk() {
+	this.query("START TRANSACTION");
+	this.query("SET GLOBAL sync_binlog=0");
+	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=0");
+}
+
+function endBulk() {
+	this.query("COMMIT");
+	this.query("SET GLOBAL sync_binlog=1");
+	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=1");
+}
+
+//=========== Job queue interface
+/*
+ * Job queue interface
+ * 
+ * select(where,cb): route valid jobs matching sql-where clause to its assigned callback cb(job).
+ * execute(client,job,cb): create detector-trainging job for client with callback to cb(job) when completed.
+ * update(where,rec,cb): set attributes of jobs matching sql-where clause and route to callback cb(job) when updated.
+ * delete(where,cb): terminate jobs matching sql-whereJob cluase then callback cb(job) when terminated.
+ * insert(job,cb): add job and route to callback cb(job) when executed.
+ */
+
+DSVAR.queues = {};
+	
+/*
+@method selectJob
+@param {Object} req job query
+@param {Function} cb callback(rec) when job departs
+*
+* Callsback cb(rec) for each queuing rec matching the where clause.
+* >>> Not used but needs work 
+ */
+function selectJob(where, cb) { 
+
+	// route valid jobs matching sql-where clause to its assigned callback cb(req).
+	var sql = this;
+	
+	sql.query(
+		where
+		? `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE ${where} ORDER BY QoS,Priority`
+		: `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client ORDER BY QoS,Priority`
+	)
+	.on("error", function (err) {
+		Log(err);
+	})
+	.on("result", function (rec) {
+		cb(rec);
+	});	
+}
+
+/*
+@method updateJob
+@param {Object} req job query
+@param {Function} cb callback(sql,job) when job departs
+*
+* Adjust priority of jobs matching sql-where clause and route to callback cb(req) when updated.
+* >>> Not used but needs work 
+*/
+function updateJob(req, cb) { 
+	
+	var sql = this;
+	
+	sql.selectJob(req, function (job) {
+		
+		cb(job.req, function (ack) {
+
+			if (req.qos)
+				sql.query("UPDATE queues SET ? WHERE ?", [{
+					QoS: req.qos,
+					Notes: ack}, {ID:job.ID}]);
+			else
+			if (req.inc)
+				sql.query("UPDATE queues SET ?,Priority=max(0,min(5,Priority+?)) WHERE ?", [{
+					Notes: ack}, req.inc, {ID:job.ID}]);
+			
+			if (req.qos) {  // move req to another qos queue
+				delete DSVAR.queues[job.qos].batch[job.ID];
+				job.qos = req.qos;
+				DSVAR.queues[qos].batch[job.ID] = job;
+			}
+			
+			if (req.pid)
+				CP.exec(`renice ${req.inc} -p ${job.pid}`);				
+				
+		});
+	});
+}
+		
+/*
+@method deleteJob
+@param {Object} req job query
+@param {Function} cb callback(sql,job) when job departs
+* >>> Not used but needs work
+*/
+function deleteJob(req, cb) { 
+	
+	var sql = this;
+	sql.selectJob(req, function (job) {
+		
+		cb(sql,job, function (ack) {
+			sql.query("UPDATE queues SET Departed=now(), Age=(now()-Arrived)/3600e3, Notes=concat(Notes,'stopped') WHERE ?", {
+				Task:job.task,
+				Client:job.client,
+				Class:job.class,
+				QoS:job.qos
+			});
+
+			delete DSVAR.queues[job.qos].batch[job.priority];
+			
+			if (job.pid) CP.exec("kill "+job.pid); 	// kill a spawned req
+		});
+	});
+}
+
+function insertJob(job, cb) { 
+/*
+@method insertJob
+@param {Object} job arriving job
+@param {Function} cb callback(sql,job) when job departs
+
+Adds job to the specified (client,class,qos,task) queue.  A departing job will execute the supplied 
+callback cb(sql,job) on a new sql thread (or spawn a new process if job.cmd provided).  The job
+is regulated by its job.rate [s] (0 disables regulation). If the client's job.credit has been exhausted, the
+job is added to the queue, but not to the regulator.  Queues are periodically monitored to store 
+billing information.  When using insertJob within an async loop, the caller should pass a cloned copy
+of the job.
+ */
+	function cpuavgutil() {				// compute average cpu utilization
+		var avgUtil = 0;
+		var cpus = OS.cpus();
+		
+		cpus.each(function (n,cpu) {
+			idle = cpu.times.idle;
+			busy = cpu.times.nice + cpu.times.sys + cpu.times.irq + cpu.times.user;
+			avgUtil += busy / (busy + idle);
+		});
+		return avgUtil / cpus.length;
+	}
+	
+	function regulate(job,cb) {		// regulate job (spawn if job.cmd provided)
+			
+		var queue = DSVAR.queues[job.qos];	// get job's qos queue
+		
+		if (!queue)  // prime the queue if it does not yet exist
+			queue = DSVAR.queues[job.qos] = new Object({
+				timer: 0,
+				batch: {},
+				rate: job.qos,
+				client: {}
+			});
+			
+		var client = queue.client[job.client];  // update client's bill
+		
+		if ( !client) client = queue.client[job.client] = new Object({bill:0});
+		
+		client.bill++;
+
+		var batch = queue.batch[job.priority]; 		// get job's priority batch
+		
+		if (!batch) 
+			batch = queue.batch[job.priority] = new Array();
+
+		batch.push( Copy(job, {cb:cb, holding: false}) );  // add job to queue
+		
+		if ( !queue.timer ) 		// restart idle queue
+			queue.timer = setInterval(function (queue) {  // setup periodic poll for this job queue
+
+				var job = null;
+				for (var priority in queue.batch) {  // index thru all priority batches
+					var batch = queue.batch[priority];
+
+					job = batch.pop(); 			// last-in first-out
+
+					if (job) {  // there is a departing job 
+//Log("job depth="+batch.length+" job="+[job.name,job.qos]);
+
+						if (job.holding)  // in holding / stopped state so requeue it
+							batch.push(job);
+									   
+						else
+						if (job.cmd) {	// this is a spawned job so spawn and hold its pid
+							job.pid = CP.exec(
+									job.cmd, 
+									  {cwd: "./public/dets", env:process.env}, 
+									  function (err,stdout,stderr) {
+
+								job.err = err || stderr || stdout;
+
+								if (job.cb) job.cb( job );  // execute job's callback
+							});
+						}
+					
+						else  			// execute job's callback
+						if (job.cb) job.cb(job);
+
+						break;
+					}
+				}
+
+				if ( !job ) { 	// an empty queue goes idle
+					clearInterval(queue.timer);
+					queue.timer = null;
+				}
+
+			}, queue.rate*1e3, queue);
+	}
+
+	var 
+		sql = this;
+	
+	if (job.qos)  // regulated job
+		sql.query(  // insert job into queue or update job already in queue
+			"INSERT INTO app.queues SET ? ON DUPLICATE KEY UPDATE " +
+			"Departed=null, Work=Work+1, State=Done/Work*100, Age=(now()-Arrived)/3600e3, ?", [{
+				// mysql unique keys should not be null
+				Client: job.client || "",
+				Class: job.class || "",
+				Task: job.task || "",
+				QoS: job.qos || 0,
+				// others 
+				State: 0,
+				Arrived	: new Date(),
+				Departed: null,
+				Marked: 0,
+				Name: job.name,
+				Age: 0,
+				Classif : "",
+				//Util: cpuavgutil(),
+				Priority: job.priority || 0,
+				Notes: job.notes,
+				Finished: 0,
+				Billed: 0,
+				Funded: job.credit ? 1 : 0,
+				Work: 1,
+				Done: 0
+			}, {
+				Notes: job.notes,
+				Task: job.task || ""
+			}
+		], function (err,info) {  // increment work backlog for this job
+
+			//Log([job,err,info]);
+			
+			if (err) 
+				return Log(err);
+			
+			job.ID = info.insertId || 0;
+			
+			if (job.credit)				// client still has credit so place it in the regulators
+				regulate( job , function (job) { // provide callback when job departs
+					sqlThread( function (sql) {  // callback on new sql thread
+						cb(sql,job);
+
+						sql.query( // reduce work backlog and update cpu utilization
+							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
+							// {Util: cpuavgutil()}, 
+							{ID: job.ID} //jobID 
+						]);
+	
+						sql.release();
+						/*
+						sql.query(  // mark job departed if no work remains
+							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
+							{ID:job.ID} //jobID
+						);
+						*/
+					});
+				});
+		});
+
+	else  { // unregulated so callback on existing sql thread
+		job.ID = 0;
+		cb(sql, job);
+	}
+}
+	
+function executeJob(req, exe) {
+
+	function flip(job) {  // flip job holding state
+		if ( queue = DSVAR.queues[job.qos] ) 	// get job's qos queue
+			if ( batch = queue.batch[job.priority] )  // get job's priority batch
+				batch.each( function (n, test) {  // matched jobs placed into holding state
+					if ( test.task==job.task && test.client==job.client && test.class==job.class )
+						test.holding = !test.holding;
+				});
+	}
+	
+	var sql = req.sql, query = req.query;
+	
+	sql.query("UPDATE ??.queues SET Holding = NOT Holding WHERE ?", {ID: query.ID}, function (err) {
+		
+		if ( !err )
+			flip();
+	});
+}
+
+/**
+ @method flattenCatalog
+ Flatten entire database for searching the catalog
+ * */
+function flattenCatalog(flags, catalog, limits, cb) {
+	
+	function flatten( sql, rtns, depth, order, catalog, limits, cb) {
+		var table = order[depth];
+		
+		if (table) {
+			var match = catalog[table];
+			var filter = cb.filter(match);
+			
+			var quality = " using "+ (filter ? filter : "open")  + " search limit " + limits.records;
+			
+			Trace("CATALOG "+table+quality+" RECS "+rtns.length, sql);
+		
+			var query = filter 
+					? "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID, " + filter + " FROM ?? HAVING Score>? LIMIT 0,?"
+					: "SELECT SQL_CALC_FOUND_ROWS " + match + ",ID FROM ?? LIMIT 0,?";
+					
+			var args = filter
+					? [table, limits.score, limits.records]
+					: [table, limits.records];
+
+			Trace( sql.query( query, args,  function (err,recs) {
+				
+				if (err) {
+					rtns.push( {
+						ID: rtns.length,
+						Ref: table,
+						Name: "error",
+						Dated: limits.stamp,
+						Searched: 0,
+						Link: (table + ".db").tag("a",{href: "/" + table + ".db"}),
+						Content: err+""
+					} );
+
+					flatten( sql, rtns, depth+1, order, catalog, limits, cb );
+				}
+				else 
+					sql.query("select found_rows()")
+					.on('result', function (stat) {
+						
+						recs.each( function (n,rec) {						
+							rtns.push( {
+								ID: rtns.length,
+								Ref: table,
+								Name: `${table}.${rec.ID}`,
+								Dated: limits.stamp,
+								Quality: recs.length + " of " + stat["found_rows()"] + quality,
+								Link: table.tag("a",{href: "/" + table + ".db?ID=" + rec.ID}),
+								Content: JSON.stringify( rec )
+							} );
+						});
+
+						flatten( sql, rtns, depth+1, order, catalog, limits, cb );
+					});
+			}) );	
+		}
+		else
+			cb.res(rtns);
+	}
+
+	var 
+		sql = this,
+		rtns = [];
+		/*limits = {
+			records: 100,
+			stamp: new Date()
+			//pivots: flags._pivot || ""
+		};*/
+		
+	flatten( sql, rtns, 0, FLEX.listify(catalog), catalog, limits, {
+		res: cb, 
+
+		filter: function (search) {
+			return ""; //Builds( "", search, flags);  //reserved for nlp, etc filters
+	} });
 }
 
 function Trace(msg,sql) {
