@@ -1,17 +1,18 @@
 /**
-@class DSVAR 
+@class JSDB 
 	[SourceForge](https://sourceforge.net) 
-	[github](https://github.com/acmesds/dsvar.git) 
-	[geointapps](https://git.geointapps.org/acmesds/dsvar)
-	[gitlab](https://gitlab.weat.nga.ic.gov/acmesds/dsvar.git)
+	[github](https://github.com/acmesds/jsdb.git) 
+	[geointapps](https://git.geointapps.org/acmesds/jsdb)
+	[gitlab](https://gitlab.west.nga.ic.gov/acmesds/jsdb.git)
 	
-# DSVAR
+# JSDB
 
-DSVAR provides a JS-agnosticator to a (default MySQL-Cluster) database:
+JSDB provides a JS-agnosticated interface to any (default MySQL-Cluster) database 
+as follows:
 	
-	var DSVAR = require("dsvar");
+	var JSDB = require("jsdb");
 	
-	DSVAR.thread( function (sql) {
+	JSDB.thread( function (sql) {
 		sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
 
 			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
@@ -22,10 +23,10 @@ DSVAR provides a JS-agnosticator to a (default MySQL-Cluster) database:
 where dsN are datasets, sql in a MySQL connector, and dataset ATTRIBUTES = {key:value, ... } are 
 described below.  Alternatively, a lone dataset can be created thusly:
 
-	var DSVAR = require("dsvar");
+	var JSDB = require("jsdb");
 	
-	DSVAR.thread( function (sql) {
-		var ds = new DSVAR.DS(sql, ATTRIBUTES);
+	JSDB.thread( function (sql) {
+		var ds = new JSDB.DS(sql, ATTRIBUTES);
 	})
 
 The following JS-agnosticated CRUD queries can then be performed:
@@ -78,7 +79,13 @@ or group recording according to its index.browse (file navigation) or index.pivo
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
 was configured), and willjournal the change when jounalling is enabled.
 
-DSVAR will also add other useful methods to the standard sql connector.
+JSDB will also add a number of methods to the sql connector:
+
+		key getters: getKeys, getFields, jsonKeys, searchKeys, geometryKeys, textKeys
+		record getters: first, context, each, all
+		misc utils: cache, flattenCatalog
+		bulk insert records: beginBulk, endBulk
+		job processing: selectJob, deleteJob, updateJob, insertJob, executeJob
 
 ## Databases
 
@@ -90,9 +97,9 @@ openv.locks	Updated when record locks used (e.g. using forms).
 app.X 	Scanned for tables that possess fulltext searchable fields.
 
 ## Use
-DSVAR is configured and started like this:
+JSDB is configured and started like this:
 
-	var TOTEM = require("../dsvar").config({
+	var JSDB = require("../jsdb").config({
 			key: value, 						// set key
 			"key.key": value, 					// indexed set
 			"key.key.": value,					// indexed append
@@ -104,12 +111,12 @@ DSVAR is configured and started like this:
 		console.log( err ? "something evil happended" : "Im running");
 	});
 
-where its configuration keys follow the [ENUM copy()](https://github.com/acmesds/enum) conventions and
-are described in its [PRM](/shares/prm/dsvar/index.html).
+where its configuration keys follow the [ENUM copy()](https://github.com/acmesds/enum) conventions 
+described in its [PRM](/shares/prm/jsdb/index.html).
 
-Require and config DSVAR:
+Require and config JSDB:
 
-	var DSVAR = require("dsvar").config({ 
+	var JSDB = require("jsdb").config({ 
 	
 		dbtx: {		// table translator
 			X: "DB.Y", ...
@@ -131,24 +138,24 @@ support does not suffice.
 
 Create dataset on a new sql thread
 
-	DSVAR.thread( function (sql) {
+	JSDB.thread( function (sql) {
 	
-		var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,rec:res});
+		var ds = new JSDB.DS(sql,{table:"test.x",trace:1,rec:res});
 		
 	});
 
 Create dataset and access each record
 
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,limit:[0,1],rec:function each(rec) {console.log(rec)}});
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,where:['x','%ll%'],rec:function each(rec) {console.log(rec)}});
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,where:['a',0,5],rec:function each(rec) {console.log(rec)}});
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,where:"a<30",rec:function each(rec) {console.log(rec)}});		
+	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,limit:[0,1],rec:function each(rec) {console.log(rec)}});
+	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:['x','%ll%'],rec:function each(rec) {console.log(rec)}});
+	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:['a',0,5],rec:function each(rec) {console.log(rec)}});
+	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:"a<30",rec:function each(rec) {console.log(rec)}});		
 
 Create dataset and access all records
 
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,where:{"a<30":null,"b!=0":null,"x like '%ll%'":null,ID:5},rec:function (recs) {console.log(recs)}});
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,order:[{property:"a",direction:"asc"}],rec:function (recs) {console.log(recs)}});
-	var ds = new DSVAR.DS(sql,{table:"test.x",trace:1,index:{pivot:"root"},group:"a,b",rec:function (recs) {console.log(recs)}});
+	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:{"a<30":null,"b!=0":null,"x like '%ll%'":null,ID:5},rec:function (recs) {console.log(recs)}});
+	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,order:[{property:"a",direction:"asc"}],rec:function (recs) {console.log(recs)}});
+	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,index:{pivot:"root"},group:"a,b",rec:function (recs) {console.log(recs)}});
 
 Select ds record(s) matched by ds.where
 

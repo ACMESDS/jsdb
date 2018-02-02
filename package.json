@@ -1,8 +1,8 @@
 {
-  "name": "dsvar",
+  "name": "jsdb",
   "version": "1.0.0",
-  "description": "/** @class DSVAR  \t[SourceForge](https://sourceforge.net)  \t[github](https://github.com/acmesds/dsvar.git)  \t[geointapps](https://git.geointapps.org/acmesds/dsvar) \t[gitlab](https://gitlab.weat.nga.ic.gov/acmesds/dsvar.git)",
-  "main": "dsvar.js",
+  "description": "/** @class DSVAR  \t[SourceForge](https://sourceforge.net)  \t[github](https://github.com/acmesds/jsdb.git)  \t[geointapps](https://git.geointapps.org/acmesds/jsdb) \t[gitlab](https://gitlab.weat.nga.ic.gov/acmesds/jsdb.git)",
+  "main": "jsdb.js",
   "dependencies": {
     "enum": "^1.0.0",
     "mysql": "^2.15.0"
@@ -13,12 +13,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ACMESDS/dsvar.git"
+    "url": "git+https://github.com/ACMESDS/jsdb.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/ACMESDS/dsvar/issues"
+    "url": "https://github.com/ACMESDS/jsdb/issues"
   },
-  "homepage": "https://github.com/ACMESDS/dsvar#readme"
+  "homepage": "https://github.com/ACMESDS/jsdb#readme"
 }
