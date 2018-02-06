@@ -1133,13 +1133,7 @@ function cache( opts, cb ) {
 							"INSERT INTO app.cache SET Added=now(), Results=?, ?", 
 							[ JSON.stringify(res || opts.default), opts.key ], 
 							function (err, info) {
-								if (err) {
-									if ( opts.default ) 
-										cb( Copy(opts.default, {ID: null}) );
-								}
-
-								else 
-									cb( Copy(res, {ID: info.insertId}) );
+								cb( Copy(res, {ID: err ? 0 : info.insertId}) );
 						});
 
 					else 
@@ -1539,6 +1533,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 }
 
 function smartTokens(q, opts) {
+	return q;
 	var 
 		optn = 0,
 		args = (opts.constructor == Array) ? null : opts;
