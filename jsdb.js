@@ -71,12 +71,12 @@ var
 						textKeys,
 						
 						// record getters
-						first,
-						context,
-						each,
-						all,
+						getFirst,
+						getEach,
+						getAll,
 						
 						// misc
+						context,
 						cache,
 						flattenCatalog,
 						
@@ -990,7 +990,7 @@ function geometryKeys(table, keys, cb) {
 	this.getFields(table, {Type:"geometry"}, keys, cb);
 }
 
-function first(trace, query, args, cb) {  // callback cb(rec) or cb(null) if error
+function getFirst(trace, query, args, cb) {  // callback cb(rec) or cb(null) if error
 	var q = query 
 		? this.query( smartTokens(query,args), args, function (err,recs) {
 				cb( err ? null : recs[0] );
@@ -1002,7 +1002,7 @@ function first(trace, query, args, cb) {  // callback cb(rec) or cb(null) if err
 	return q;
 }
 
-function each(trace, query, args, cb) { // callback cb(rec) with each rec
+function getEach(trace, query, args, cb) { // callback cb(rec) with each rec
 	var q = query 
 		? this.query( smartTokens(query,args), args).on("result", cb)
 	
@@ -1012,9 +1012,9 @@ function each(trace, query, args, cb) { // callback cb(rec) with each rec
 	return q;
 }
 
-function all(trace, query, args, cb) { // callback cb(recs) if no error
+function getAll(trace, query, args, cb) { // callback cb(recs) if no error
 	var q = query
-		? this.query( smartTokens(query,args), args, function (err,recs) {
+		? this.query( query, args, function (err,recs) {
 				if (!err) if(cb) cb( recs );
 			})
 	
