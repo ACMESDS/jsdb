@@ -70,10 +70,13 @@ var
 						geometryKeys,
 						textKeys,
 						
-						// record getters
-						getFirst,
-						getEach,
-						getAll,
+						// record enumerators
+						forFirst,
+						forEach,
+						forAll,
+						then,
+						end,
+						error,
 						
 						// misc
 						context,
@@ -990,7 +993,33 @@ function geometryKeys(table, keys, cb) {
 	this.getFields(table, {Type:"geometry"}, keys, cb);
 }
 
-function getFirst(trace, query, args, cb) {  // callback cb(rec) or cb(null) if error
+function then(cb) {
+	var sql = this;
+	this.on("end", function () {
+		if (cb) cb(sql);
+	});
+	return this;
+}
+
+function end(cb) {
+	var sql = this;
+	this.on("end", function () {
+		sql.release();
+		if (cb) cb(sql);
+	});
+	return this;
+}
+
+function error(cb) {
+	var sql = this;
+	this.on("error", function (err) {
+		sql.release();
+		if (cb) cb(err);
+	});
+	return this;
+}
+
+function forFirst(trace, query, args, cb) {  // callback cb(rec) or cb(null) if error
 	var q = query 
 		? this.query( smartTokens(query,args), args, function (err,recs) {
 				cb( err ? null : recs[0] );
@@ -999,20 +1028,20 @@ function getFirst(trace, query, args, cb) {  // callback cb(rec) or cb(null) if 
 		: { sql: "IGNORE", on: function (){} };
 	
 	if (trace) Trace( trace + " " + q.sql);	
-	return q;
+	return this;
 }
 
-function getEach(trace, query, args, cb) { // callback cb(rec) with each rec
+function forEach(trace, query, args, cb) { // callback cb(rec) with each rec
 	var q = query 
 		? this.query( smartTokens(query,args), args).on("result", cb)
 	
 		: { sql: "IGNORE", on: function (){} };
 	
 	if (trace) Trace( trace + " " + q.sql);	
-	return q;
+	return this;
 }
 
-function getAll(trace, query, args, cb) { // callback cb(recs) if no error
+function forAll(trace, query, args, cb) { // callback cb(recs) if no error
 	var q = query
 		? this.query( query, args, function (err,recs) {
 				if (!err) if(cb) cb( recs );
@@ -1021,7 +1050,7 @@ function getAll(trace, query, args, cb) { // callback cb(recs) if no error
 		: { sql: "IGNORE", on: function (){} };
 	
 	if (trace) Trace( trace + " " + q.sql);	
-	return q;
+	return this;
 }
 
 function context(ctx,cb) {  // callback cb(dsctx) with a JSDB context
@@ -1110,18 +1139,18 @@ function cache( opts, cb ) {
 	var sql = this;
 	
 	if ( opts.key )
-		sql.first( 
+		sql.forFirst( 
 			"", 
-			"SELECT Results FROM app.cache WHERE least(?,1) LIMIT 1", 
+			"SELECT ID,Results FROM app.cache WHERE least(?,1) LIMIT 1", 
 			[ opts.key ], function (rec) {
 
 			if (rec) 
 				try {
-					cb( JSON.parse(rec.Results) );
+					cb( Copy( JSON.parse(rec.Results), {ID:rec.ID}) );
 				}
 				catch (err) {
 					if ( opts.default )
-						cb( Copy(opts.default, {ID: null} ) );
+						cb( Copy(opts.default, {ID: 0} ) );
 				}
 
 			else
@@ -1138,17 +1167,17 @@ function cache( opts, cb ) {
 
 					else 
 					if ( opts.default )
-						cb( Copy(opts.default, {ID: null}) );
+						cb( Copy(opts.default, {ID: 0}) );
 				});
 
 			else
 			if ( opts.default )
-				cb( Copy(opts.default, {ID: null}) );
+				cb( Copy(opts.default, {ID: 0}) );
 		});
 	
 	else
 	if ( opts.default )
-		cb( Copy({ID: null}, opts.default) );
+		cb( Copy(opts.default, {ID: 0}) );
 	
 }
 
@@ -1412,9 +1441,9 @@ of the job.
 							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
 							// {Util: cpuavgutil()}, 
 							{ID: job.ID} //jobID 
-						]);
+						]).end();
 	
-						sql.release();
+						//sql.release();
 						/*
 						sql.query(  // mark job departed if no work remains
 							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
