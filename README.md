@@ -79,12 +79,13 @@ or group recording according to its index.browse (file navigation) or index.pivo
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
 was configured), and willjournal the change when jounalling is enabled.
 
-JSDB will also add a number of methods to the sql connector:
+JSDB adds several methods to the sql connector:
 
+		context: establish datasets
 		key getters: getKeys, getFields, jsonKeys, searchKeys, geometryKeys, textKeys
-		record getters: first, context, each, all
+		enumerators: forFirst, forEach, forAll, then, error, end
 		misc utils: cache, flattenCatalog
-		bulk insert records: beginBulk, endBulk
+		bulk insersion: beginBulk, endBulk
 		job processing: selectJob, deleteJob, updateJob, insertJob, executeJob
 
 ## Databases
