@@ -17,6 +17,7 @@ var
 	JSDB = module.exports = {
 		
 		errors: {		//< errors messages
+			noConnect: new Error("sql pool exhausted or undefined"),
 			nillUpdate: new Error("nill update query"),
 			unsafeQuery: new Error("unsafe queries not allowed"),
 			unsupportedQuery: new Error("query not supported"),
@@ -134,8 +135,10 @@ var
 			 }
 		},
 		
-		thread: sqlThread
-
+		thread: sqlThread,
+		forEach: sqlEach,
+		forAll: sqlAll,
+		forFirst: sqlFirst
 	};
 
 var 											// totem bindings
@@ -995,24 +998,24 @@ function geometryKeys(table, keys, cb) {
 
 function then(cb) {
 	var sql = this;
-	this.on("end", function () {
+	this.q.on("end", function () {
 		if (cb) cb(sql);
 	});
 	return this;
 }
 
-function end(cb) {
+function end(cb) {  // on-end callback cb() and release connection
 	var sql = this;
-	this.on("end", function () {
+	this.q.on("end", function () {
 		sql.release();
 		if (cb) cb(sql);
 	});
 	return this;
 }
 
-function error(cb) {
+function error(cb) {  // on-error callback cb(err) and release connection
 	var sql = this;
-	this.on("error", function (err) {
+	this.q.on("error", function (err) {
 		sql.release();
 		if (cb) cb(err);
 	});
@@ -1020,36 +1023,29 @@ function error(cb) {
 }
 
 function forFirst(trace, query, args, cb) {  // callback cb(rec) or cb(null) if error
-	var q = query 
-		? this.query( smartTokens(query,args), args, function (err,recs) {
-				cb( err ? null : recs[0] );
-			})
+	this.q = this.query( query || "#ignore", args, function (err,recs) {  // smartTokens(query,args)
+		cb( err ? null : recs[0] );
+	});
 	
-		: { sql: "IGNORE", on: function (){} };
-	
-	if (trace) Trace( trace + " " + q.sql);	
+	if (trace) Trace( trace + " " + this.q.sql);	
 	return this;
 }
 
 function forEach(trace, query, args, cb) { // callback cb(rec) with each rec
-	var q = query 
-		? this.query( smartTokens(query,args), args).on("result", cb)
 	
-		: { sql: "IGNORE", on: function (){} };
+	// smartTokens(query,args)
+	this.q = this.query( query || "#ignore", args).on("result", cb);
 	
-	if (trace) Trace( trace + " " + q.sql);	
+	if (trace) Trace( trace + " " + this.q.sql);	
 	return this;
 }
 
 function forAll(trace, query, args, cb) { // callback cb(recs) if no error
-	var q = query
-		? this.query( query, args, function (err,recs) {
-				if (!err) if(cb) cb( recs );
-			})
+	this.q = this.query( query || "#ignore", args, function (err,recs) {
+		if (!err) if(cb) cb( recs );
+	})
 	
-		: { sql: "IGNORE", on: function (){} };
-	
-	if (trace) Trace( trace + " " + q.sql);	
+	if (trace) Trace( trace + " " + this.q.sql);	
 	return this;
 }
 
@@ -1062,70 +1058,6 @@ function context(ctx,cb) {  // callback cb(dsctx) with a JSDB context
 		dsctx[dskey] = new DATASET( sql, dsats );
 	});
 	cb(dsctx);
-}
-
-function sqlThread(cb) {  // callback cb(sql) with a sql connection
-
-	function dummyConnector() {
-		var
-			This = this,
-			err = JSDB.errors.noDB;
-
-		this.query = function (q,args,cb) {
-			Trace("NODB "+q);
-			if (cb)
-				cb(err);
-			else
-			if (args && args.constructor == Function)
-				args(err);
-
-			return This;
-		};
-
-		this.on = function (ev, cb) {
-			return This;
-		};
-
-		this.sql = "DUMMY SQL CONNECTOR";
-
-		this.release = function () {
-			return This;
-		};
-
-		this.createPool = function (opts) {
-			return null;
-		};
-	}
-
-	var 
-		mysql = JSDB.mysql;
-
-	if (mysql)
-		if ( mysql.pool) 
-			mysql.pool.getConnection( function (err,sql) {
-				if (err) {
-					Log({
-						sqlpool: err,
-						total: mysql.pool._allConnections.length ,
-						free: mysql.pool._freeConnections.length,
-						queue: mysql.pool._connectionQueue.length
-					});
-
-					/*mysql.pool.end( function (err) {
-						mysql.pool = MYSQL.createPool(mysql.opts);
-					}); */
-
-					cb( new dummyConnector(err) );
-				}
-				else 
-					cb( sql );
-			});
-	
-		else
-			cb( MYSQL.createConnection(mysql.opts) || new dummyConnector( ) );
-
-	else 
-		cb( new dummyConnector( ) ); 
 }
 
 /*
@@ -1601,4 +1533,92 @@ function smartTokens(q, opts) {
 	
 function Trace(msg,sql) {
 	ENUM.trace("V>",msg,sql);
+}
+
+function sqlThread(cb) {  // callback cb(sql) with a sql connection
+
+	function dummyConnector() {
+		var
+			This = this,
+			err = JSDB.errors.noDB;
+
+		this.query = function (q,args,cb) {
+			Trace("NODB "+q);
+			if (cb)
+				cb(err);
+			else
+			if (args && args.constructor == Function)
+				args(err);
+
+			return This;
+		};
+
+		this.on = function (ev, cb) {
+			return This;
+		};
+
+		this.sql = "DUMMY SQL CONNECTOR";
+
+		this.release = function () {
+			return This;
+		};
+
+		this.createPool = function (opts) {
+			return null;
+		};
+	}
+
+	var 
+		mysql = JSDB.mysql;
+
+	if (mysql)
+		if ( mysql.pool) 
+			mysql.pool.getConnection( function (err,sql) {
+				if (err) 
+					Log(JSDB.errors.noConnect, {
+						sqlpool: err,
+						total: mysql.pool._allConnections.length ,
+						free: mysql.pool._freeConnections.length,
+						queue: mysql.pool._connectionQueue.length
+					});
+
+				else 
+					cb( sql );
+			});
+
+		else
+		if ( sql = MYSQL.createConnection(mysql.opts) ) 
+			cb( sql );
+
+		else
+			Log(JSDB.errors.noConnect);
+
+	else 
+		Log(JSDB.errors.noConnect);
+}
+
+function sqlEach(trace, query, args, cb) {
+	sqlThread( function (sql) {
+		sql.forEach( trace, query, args, function (rec) {
+			cb(rec, sql);
+		}).end( );
+	});
+}
+
+function sqlAll(trace, query, args, cb) {
+	sqlThread( function (sql) {
+		sql.forAll( trace, query, args, function (recs) {
+			cb(recs, sql);
+			sql.release();
+		});
+	});
+}
+
+function sqlFirst(trace, query, args, cb) {
+	sqlThread( function (sql) {
+		sql.forFirst(trace, query, args, function (rec) {
+			cb(rec, sql);
+			sql.release();
+		});
+	});
 }
