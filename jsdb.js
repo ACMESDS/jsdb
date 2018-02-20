@@ -83,6 +83,7 @@ var
 						context,
 						cache,
 						flattenCatalog,
+						smartFormat,
 						
 						// bulk insert records
 						beginBulk,
@@ -1678,10 +1679,19 @@ function smartFormat(query,args) {
 		
 			return rtn.length ? rtn.join(",") : "1";
 		})
-		.replace("ORDER BY ??", function () {
-			return ( orderby = args.orderby )  
-				? sql.format("ORDER BY ??", orderby)
-				: "";
+		.replace("ORDER BY ??", function (x) {
+			var rtn = "";
+			if ( orderby = args.orderby )  
+				if ( orderby.length )
+					rtn = sql.format(x, orderby);
+			return rtn;
 		})
+		.replace("GROUP BY ??", function (x) {
+			var rtn = "";
+			if ( groupby = args.groupby )  
+				if ( groupby.length )
+					rtn = sql.format(x, groupby);
+			return rtn;
+		});
 		
 }
