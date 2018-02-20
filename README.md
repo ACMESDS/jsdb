@@ -10,34 +10,37 @@
 JSDB provides a JS-agnosticated interface to any (default MySQL-Cluster) database 
 as follows:
 	
-	var JSDB = require("jsdb");
-	
-	JSDB.thread( function (sql) {
-		sql.context( {ds1:ATTRIBUTES, ds2:ATTRIBUTES, ... }, function (ctx) {
-
-			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
-
-		});
+	JSDB.context( {ds1:{key:value, ... }, ds2:{key:value, ... }, ... }, function (ctx, sql) {
+		var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
 	});
 
-where dsN are datasets, sql in a MySQL connector, and dataset ATTRIBUTES = {key:value, ... } are 
-described below.  Alternatively, a lone dataset can be created thusly:
+or like:
 
-	var JSDB = require("jsdb");
-	
 	JSDB.thread( function (sql) {
-		var ds = new JSDB.DS(sql, ATTRIBUTES);
+		sql.context( {ds1:{key:value, ... }, ds2:{key:value, ... }, ... }, function (ctx) {
+			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
+		}).end();
+	});
+
+or as a lone dataset:
+
+	JSDB.thread( function (sql) {
+		var ds = new JSDB.DS(sql, {key:value, ... });
 	})
 
-The following JS-agnosticated CRUD queries can then be performed:
+where sql is a MySQL connector, the dataset {key:value, ... } attributes are described below, and
+where ds permits the following JS-agnosticated CRUD operations:
 
-	ds.rec = { FIELD:VALUE, ... }		// update matched record(s) 
-	ds.rec = [ {...}, {...}, ... ]		// insert record(s)
-	ds.rec = null 		// delete matched record(s)
+	ds.rec = { FIELD:VALUE, ... }				// update matched record(s) 
+	ds.rec = [ {...}, {...}, ... ]							// insert record(s)
+	ds.rec = null 											// delete matched record(s)
 	ds.rec = function CB(recs,me) {...}			// select matched record(s)
 
-with callback to a response CB method when the query completes.  Alternatively,
-queries can be issued like this:
+with callback to a CB = each | all | clone | trace method with each/all record(s) matched 
+by .where, indexed by  .index, ordered by .order, grouped by .group, filtered by .having 
+and limited by .limit keys defined below.
+
+Alternatively, queries can be issued like this:
 
 	ds.res = callback() { ... }
 	ds.data = [ ... ]
@@ -49,7 +52,7 @@ or in record-locked mode using:
 
 where CRUDE = "select" | "delete" | "update" | "insert" | "execute".
 
-Dataset ATTRIBUTES = { key: value, ... } provide SQL agnostication:
+In addition to the basic { key: value, ... } attributes:
 
 	table: 	DB.TABLE || TABLE
 	where: 	[ FIELD, FIELD, ... ] | { CLAUSE:null, nlp:PATTERN, bin:PATTERN, qex:PATTERN, has:PATTERN, like:PATTERN, FIELD:VALUE, FIELD:[MIN,MAX], ...} | CLAUSE
@@ -60,8 +63,7 @@ Dataset ATTRIBUTES = { key: value, ... } provide SQL agnostication:
 	limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
 	index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
 
-In addition, update journalling, search tracking, query broadcasting, and auto field conversion is 
-supported using these ATTRIBUTES:
+journal updating, search tracking, query broadcasting, and field conversion is supported with:
 
 	unsafeok: 	[true] | false 		// allow potentially unsafe queries
 	trace: [true] | false			// trace queries
@@ -70,23 +72,34 @@ supported using these ATTRIBUTES:
 	track: true | [false] 		// enable search tracking
 	ag: "..." 		// aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
 
-The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
-by .where, indexed by  .index, ordered by .order, grouped by .group, filtered by .having 
-and limited by .limit ATTRIBUTES.  Select will search for PATTERN 
-using its index.nlp (natural language parse), index.bin (binary mode), index.qex (query expansion), 
-or group recording according to its index.browse (file navigation) or index.pivot (joint statistics).
+Select will search for PATTERN 
+using its index.nlp (natural language parse), index.bin (binary mode), and index.qex (query expansion) keys;
+and will group according to its index.browse (file navigation) or index.pivot (joint statistics) keys.  Its .where = { 
+key: value, ... } attribute supports key<, key>, key=, key<=, key>=, and key!= operators.
 
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
 was configured), and willjournal the change when jounalling is enabled.
 
-JSDB adds several methods to the sql connector:
+JSDB adds the following methods to the sql connector:
 
 		context: establish datasets
 		key getters: getKeys, getFields, jsonKeys, searchKeys, geometryKeys, textKeys
-		enumerators: forFirst, forEach, forAll, then, error, end
+		enumerators: forFirst, forEach, forAll
+		chaining: then, error, end
 		misc utils: cache, flattenCatalog
 		bulk insersion: beginBulk, endBulk
 		job processing: selectJob, deleteJob, updateJob, insertJob, executeJob
+		
+and, in addition to the basic context starters:
+
+		JSDB.thread( function cb(sql) {...} )
+		JSDB.context( dsctx, function cb(ctx, sql) {...} )
+		
+JSDB also provides enumerators that auto-release its sql connector:
+
+		JSDB.forFirst( trace, query, args, function cb(rec, sql) {...} )
+		JSDB.forEach( trace, query, args, function cb(rec, sql) {...} )
+		JSDB.forAll( trace, query, args, function cb( [rec, rec, ....] , sql) {...} )
 
 ## Databases
 
@@ -140,9 +153,7 @@ support does not suffice.
 Create dataset on a new sql thread
 
 	JSDB.thread( function (sql) {
-	
 		var ds = new JSDB.DS(sql,{table:"test.x",trace:1,rec:res});
-		
 	});
 
 Create dataset and access each record

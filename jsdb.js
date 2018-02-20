@@ -138,7 +138,8 @@ var
 		thread: sqlThread,
 		forEach: sqlEach,
 		forAll: sqlAll,
-		forFirst: sqlFirst
+		forFirst: sqlFirst,
+		context: sqlContext
 	};
 
 var 											// totem bindings
@@ -1621,4 +1622,66 @@ function sqlFirst(trace, query, args, cb) {
 			sql.release();
 		});
 	});
+}
+
+function sqlContext(ctx, cb) {
+	sqlThread( function (sql) {
+		sql.context( ctx, function (dsctx) {
+			cb(dsctx, sql);
+			sql.release();
+		});
+	});
+}
+
+function smartFormat(query,args) {
+	var sql = this;
+	return query
+		.replace("_?", function () {
+			var idx =0, rtn = [], where = args.where;
+			if (where)
+				for (var key in where) 
+					if ( val = where[key] ) {
+						op = key.substr(-1);
+						key = key.substr(0,key.length-1);
+						switch ( op ) {
+							case "$":
+								rtn.push( `MATCH(${key}) AGAINST("${val}")` );
+								break;
+							case "^":
+								rtn.push( `MATCH(${key}) AGAINST"${val}" IN BINARY MODE` );
+								break;
+							case "|":
+								rtn.push( `MATCH(${key}) AGAINST"${val}" WITH QUERY EXPANSION` );
+								break;
+							case "%":
+								rtn.push( `${key} LIKE "${val}"` );
+								break;
+							case "/":
+								rtn.push( `INSTR(${key}, "${val}"` );
+								break;
+							case "*":
+								var vals = val.split(",");
+								rtn.push( `${key} BETWEEN ${vals[0]} AND ${vals[1]}` );
+								break;
+							case "<":
+							case ">":
+							case "!":
+							default:
+								rtn.push( `${key}${op}=${val}` );
+								break;
+
+						}
+					}
+		
+					else 
+						rtn.push(key);
+		
+			return rtn.length ? rtn.join(",") : "1";
+		})
+		.replace("ORDER BY ??", function () {
+			return ( orderby = args.orderby )  
+				? sql.format("ORDER BY ??", orderby)
+				: "";
+		})
+		
 }
