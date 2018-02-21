@@ -75,9 +75,9 @@ var
 						forFirst,
 						forEach,
 						forAll,
-						then,
-						end,
-						error,
+						thenDo,
+						onEnd,
+						onError,
 						
 						// misc
 						context,
@@ -998,7 +998,7 @@ function geometryKeys(table, keys, cb) {
 	this.getFields(table, {Type:"geometry"}, keys, cb);
 }
 
-function then(cb) {
+function thenDo(cb) {
 	var sql = this;
 	this.q.on("end", function () {
 		if (cb) cb(sql);
@@ -1006,7 +1006,7 @@ function then(cb) {
 	return this;
 }
 
-function end(cb) {  // on-end callback cb() and release connection
+function onEnd(cb) {  // on-end callback cb() and release connection
 	var sql = this;
 	this.q.on("end", function () {
 		sql.release();
@@ -1015,12 +1015,9 @@ function end(cb) {  // on-end callback cb() and release connection
 	return this;
 }
 
-function error(cb) {  // on-error callback cb(err) and release connection
+function onError(cb) {  // on-error callback cb(err) and release connection
 	var sql = this;
-	this.q.on("error", function (err) {
-		sql.release();
-		if (cb) cb(err);
-	});
+	this.q.on("error", cb);
 	return this;
 }
 
@@ -1375,7 +1372,7 @@ of the job.
 							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
 							// {Util: cpuavgutil()}, 
 							{ID: job.ID} //jobID 
-						]).end();
+						]).onEnd();
 	
 						//sql.release();
 						/*
@@ -1603,7 +1600,7 @@ function sqlEach(trace, query, args, cb) {
 	sqlThread( function (sql) {
 		sql.forEach( trace, query, args, function (rec) {
 			cb(rec, sql);
-		}).end( );
+		}).onEnd( );
 	});
 }
 
