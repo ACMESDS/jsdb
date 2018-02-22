@@ -66,6 +66,7 @@ var
 						// key getters
 						getKeys,
 						getFields,
+						getTables,
 						jsonKeys,
 						searchKeys,
 						geometryKeys,
@@ -1631,6 +1632,21 @@ function sqlContext(ctx, cb) {
 	});
 }
 
+function getTables(db, cb) {
+	var 
+		key = `Tables_in_${db}`,
+		tables = {};
+				  
+	this.query( "SHOW TABLES FROM ??", [db], function (err, recs) {
+		if ( !err ) {
+			recs.forEach( function (rec) {
+				tables[ rec[key] ] = db;
+			});
+			cb( tables );
+		}
+	});
+}
+	
 function smartFormat(query,args) {
 	var sql = this;
 	return query
