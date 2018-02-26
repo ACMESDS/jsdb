@@ -32,7 +32,7 @@ var
 			noRecord: new Error("no record found")
 		},
 
-		fetchers: null, 	//< defined by config 
+		fetcher: null, 	//< defined by config 
 		
 		attrs: {		//< reserved for dataset attributes derived during config
 			default:	{ 					// default dataset attributes
@@ -1062,7 +1062,7 @@ function context(ctx,cb) {  // callback cb(dsctx) with a JSDB context
 
 /*
 Implements generic cache.  Looks for cache given opts.key and, if found, returns cached results on cb(results);
-otherwse, if not found, returns results via opts.make(fetchers, opts.parms, cb).  If cacheing fails, then opts.default 
+otherwse, if not found, returns results via opts.make(fetcher, opts.parms, cb).  If cacheing fails, then opts.default 
 is returned.  The returned results will always contain a results.ID for its cached ID.  If a opts.default is not provided,
 then the cb callback in not made.
 */
@@ -1087,7 +1087,7 @@ function cache( opts, cb ) {
 
 			else
 			if ( opts.make && opts.parms ) 
-				opts.make( JSDB.fetchers, opts.parms, function (res) {
+				opts.make( JSDB.fetcher, opts.parms, function (res) {
 
 					if (res) 
 						sql.query( 
