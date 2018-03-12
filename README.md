@@ -31,7 +31,7 @@ or as a lone dataset:
 where sql is a MySQL connector, the dataset {key:value, ... } attributes are described below, and
 where ds permits the following JS-agnosticated CRUD operations:
 
-	ds.rec = { FIELD:VALUE, ... }				// update matched record(s) 
+	ds.rec = { KEY:VALUE, ... }				// update matched record(s) 
 	ds.rec = [ {...}, {...}, ... ]							// insert record(s)
 	ds.rec = null 											// delete matched record(s)
 	ds.rec = function CB(recs,me) {...}			// select matched record(s)
@@ -52,30 +52,36 @@ or in record-locked mode using:
 
 where CRUDE = "select" | "delete" | "update" | "insert" | "execute".
 
-In addition to the basic { key: value, ... } attributes:
+Basic { key: value, ... } attributes are as follows:
 
-	table: 	DB.TABLE || TABLE
-	where: 	[ FIELD, FIELD, ... ] | { CLAUSE:null, nlp:PATTERN, bin:PATTERN, qex:PATTERN, has:PATTERN, like:PATTERN, FIELD:VALUE, FIELD:[MIN,MAX], ...} | CLAUSE
-	res: 	function CB(ds) {...}
-	having: [ FIELD, VALUE ] | [ FIELD, MIN, MAX ] | {FIELD:VALUE, CLAUSE:null, FIELD:[MIN,MAX], ...} | CLAUSE
-	order: 	[ {FIELD:ORDER, ...}, {property:FIELD, direction:ORDER}, FIELD, ...] | "FIELD, ..."
-	group: 	[ FIELD, ...] | "FIELD, ..."
-	limit: 	[ START, COUNT ] | {start:START, count:COUNT} | "START,COUNT"
-	index:	[ FIELD, ... ] | "FIELD, ... " | { has:PATTERN, nlp:PATTERN, bin:PATTERN, qex:PATTERN, browse:"FIELD,...", pivot: "FIELD,..." }
+	from: DB.TABLE || TABLE
+	where: 	{KEY:VALUE, ... }
+	tests: [ TEST, .... ]
+	res: function CB(ds) {...}
+	having: {KEY:VALUE, ... }
+	order: KEY, ...
+	sort: [ {property:KEY, direction:ORDER}, ... ]
+	group: KEY, ...
+	nlp: KEY
+	bin: KEY
+	qex: KEY
+	pivot: KEY, ...
+	browse: KEY, ...
+	limit: VALUE
+	offset: VALUE
+	index: KEY, ...
+	trace: true | false	
+	search: PATTERN
+	track: true | false
 
-journal updating, search tracking, query broadcasting, and field conversion is supported with:
+	// legacy:
+	// unsafeok: 	[true] | false 		// allow potentially unsafe queries 
+	// journal: true | [false] 		// enable table journalling (legacy)
+	// ag: "..." 		// aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
 
-	unsafeok: 	[true] | false 		// allow potentially unsafe queries
-	trace: [true] | false			// trace queries
-	journal: true | [false] 		// enable table journalling
-	search: "field,field,..." 		// define fulltext search fields
-	track: true | [false] 		// enable search tracking
-	ag: "..." 		// aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
-
-Select will search for PATTERN 
-using its index.nlp (natural language parse), index.bin (binary mode), and index.qex (query expansion) keys;
-and will group according to its index.browse (file navigation) or index.pivot (joint statistics) keys.  Its .where = { 
-key: value, ... } attribute supports key<, key>, key=, key<=, key>=, and key!= operators.
+PATTERN should have a toSqlString method that renders a "KEY OP VAL" expression where
+OP is typically one of [ $"<>!*/| ] to implement relational searches (eg. has, natural language, 
+binary, query expansion, etc).
 
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
 was configured), and willjournal the change when jounalling is enabled.

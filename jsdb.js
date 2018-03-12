@@ -73,6 +73,8 @@ var
 						textKeys,
 						
 						// record enumerators
+						build,
+						run,
 						forFirst,
 						forEach,
 						forAll,
@@ -83,8 +85,8 @@ var
 						// misc
 						context,
 						cache,
+						hawk,
 						flattenCatalog,
-						smartFormat,
 						
 						// bulk insert records
 						beginBulk,
@@ -146,6 +148,7 @@ var
 
 var 											// totem bindings
 	ENUM = require("enum").extend({
+		/*  legacy soon
 		String: [
 			function Escape() {
 				var q = "`";
@@ -168,6 +171,7 @@ var 											// totem bindings
 					return  q + this.join(slash ? `${q}${slash}${q}` : `${q},${q}`) + q;
 			}
 		]
+		*/
 	}),
 	Copy = ENUM.copy,
 	Each = ENUM.each,
@@ -212,8 +216,9 @@ CRUD interface ds.rec = req where req is an
 		"X": dataset CRUD (ds.rec = ds.data) X=select,update,delete,create,execute 
 		"lock.X": lock/unlock record for dataset CRUD
 */
-DATASET.prototype = {
+DATASET.prototype = {  // need to rework this with calls to sql.run
 	
+	/*
 	x: function xquery(opt,key,buf) {  // query builder extends me.query and me.opts
 		
 		var 
@@ -309,7 +314,7 @@ DATASET.prototype = {
 							}
 							break;
 
-						/*
+						/ *
 						case Object:
 							
 							if (opt.idx) 
@@ -325,15 +330,15 @@ DATASET.prototype = {
 								me.x(opt.pivot, "PIVOT");
 							}
 							break;
-						*/
+						* /
 					}	
 					
 					me.x(me.index, "INDEX");
 
-					/*
+					/ *
 					if ( me.geo )  // any geometry fields are returned as geojson
 						me.query += ","+me.geo;
-					*/
+					* /
 					
 					break;
 
@@ -507,11 +512,11 @@ DATASET.prototype = {
 				case "SET":
 					
 					switch (type) {
-						/*case Array:
+						/ *case Array:
 							me.safe = false;
 							me.query += ` ${key} ??`;
 							me.opts.push(opt);
-							break;*/
+							break;* /
 							
 						case String:
 							me.safe = false;
@@ -522,7 +527,7 @@ DATASET.prototype = {
 							
 							me.query += ` ${key} ?`;
 							
-							/*
+							/ *
 							for (var n in opt) {  // object subkeys are json fields
 								var js = opt[n];
 								if (typeof js == "object") {
@@ -530,7 +535,7 @@ DATASET.prototype = {
 									me.query += `,json_merge(${n},${js})`;
 									delete opt[n];
 								}
-							*/
+							* /
 							
 							me.opts.push(opt);
 							break;
@@ -571,9 +576,17 @@ DATASET.prototype = {
 			}
 
 	},
+	*/
 	
 	update: function (req,res) { // update record(s) in dataset
 
+		var 
+			me = this,
+			query = this.where,
+			body = req,
+			emitter = JSDB.io.sockets.emit;
+		
+		/*
 		function hawkChange(log) {  // journal changes 
 			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
 			.on("result", function (hawk) {
@@ -612,20 +625,20 @@ DATASET.prototype = {
 		
 		else
 		if (me.safe || me.unsafeok) {
-			/*
+			/ *
 			//uncomment to disable journalling
 			me.journal = false;
-			*/
+			* /
 			
 			if (me.journal) {  // attempt change journal if enabled
 				hawkChange({Dataset:me.table, Field:""});  // journal entry for the record itself
-				/*
+				/ *
 				// uncomment to enable
 				for (var key in req) { 		// journal entry for each record key being changed
 					hawk({Dataset:me.table, Field:key});
 					hawk({Dataset:"", Field:key});
 				}
-				*/
+				* /
 			}
 			
 			sql.query(me.query, me.opts, function (err,info) {
@@ -649,17 +662,64 @@ DATASET.prototype = {
 		else
 		if (res)
 			res( JSDB.errors.unsafeQuery );
-			
+		*/
+		
+		if ( query.ID )
+			sql.run( Copy( me, {
+				crud: "update",
+				set: body
+			}), emitter, function (err,info) {
+
+				//Log(info);
+				res( err || info );
+
+				if (true) {  // update change journal if enabled
+					sql.hawk({Dataset:ds, Field:""});  // journal entry for the record itself
+					if (false)   // journal entry for each record key being changed
+						for (var key in req) { 		
+							sql.hawk({Dataset:ds, Field:key});
+							sql.hawk({Dataset:"", Field:key});
+						}
+				}
+
+			});
+		
 	},
 	
 	select: function (req,res) { // select record(s) from dataset
 		
-		var	
+		var 
 			me = this,
-			table = me.table,
-			client = me.client,
-			sql = me.sql;
+			sql = this.sql;
+			
+		switch (req.name) {
+			case "each":
+				return sql.run( Copy( me, {
+					crud: "select"
+				}), null, function (err,recs) {
+
+					recs.forEach( function (rec) {
+						req(rec, me);
+					});
+
+				});
+				
+			case "clone":
+			case "trace":
+				return;
+				
+			case "all":
+			default:
+				return sql.run( Copy( me, {
+					crud: "select"
+				}), null, function (err,recs) {
+
+					req(recs, me);
+
+				});				
+		}
 		
+		/*
 		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true; 
 		
 		me.x(me.index.select, "SELECT SQL_CALC_FOUND_ROWS");
@@ -728,11 +788,27 @@ DATASET.prototype = {
 			res( JSDB.errors.unsafeQuery );
 		
 		if (me.trace) Trace(me.query);
-					
+		*/
 	},
 	
 	delete: function (req,res) {  // delete record(s) from dataset
 		
+		var 
+			me = this,
+			query = this.where,
+			sql = this.sql,
+			emitter = JSDB.io.sockets.emit;
+		
+		if ( query.ID )
+			sql.run( Copy( me, {
+				crud: "delete"
+			}), emitter, function (err,info) {
+
+				//Log(info);
+				res( err || info );
+
+			});	
+		/*
 		var	
 			me = this,
 			table = me.table,
@@ -770,10 +846,42 @@ DATASET.prototype = {
 		else
 		if (res)
 			res( JSDB.errors.unsafeQuery );		
+		*/
 	},
 	
 	insert: function (req,res) {  // insert record(s) into dataset
 		
+		var
+			me = this,
+			query = this.where,
+			body = req,
+			emitter = JSDB.io.sockets.emit;
+		
+		if (body.constructor == Array)
+			body.forEach( function (rec) {
+				sql.run( Copy( me, {
+					crud: "insert",
+					set: rec
+				}), emitter, function (err,info) {
+
+					//Log(info);
+					res( err || info );
+
+				});
+			});
+
+		else
+			sql.run( Copy( me, {
+				crud: "insert",
+				set: body
+			}), emitter, function (err,info) {
+
+				//Log(info);
+				res( err || info );
+
+			});
+
+		/*
 		var	
 			me = this,
 			table = me.table,
@@ -813,7 +921,7 @@ DATASET.prototype = {
 
 			if (me.trace) Trace(me.query);
 		});
-
+		*/
 	},
 
 	get rec() {   // reserved
@@ -1140,6 +1248,7 @@ function endBulk() {
 
 JSDB.queues = {};
 	
+function selectJob(where, cb) { 
 /*
 @method selectJob
 @param {Object} req job query
@@ -1148,7 +1257,6 @@ JSDB.queues = {};
 * Callsback cb(rec) for each queuing rec matching the where clause.
 * >>> Not used but needs work 
  */
-function selectJob(where, cb) { 
 
 	// route valid jobs matching sql-where clause to its assigned callback cb(req).
 	var sql = this;
@@ -1166,6 +1274,7 @@ function selectJob(where, cb) {
 	});	
 }
 
+function updateJob(req, cb) { 
 /*
 @method updateJob
 @param {Object} req job query
@@ -1174,7 +1283,6 @@ function selectJob(where, cb) {
 * Adjust priority of jobs matching sql-where clause and route to callback cb(req) when updated.
 * >>> Not used but needs work 
 */
-function updateJob(req, cb) { 
 	
 	var sql = this;
 	
@@ -1204,13 +1312,13 @@ function updateJob(req, cb) {
 	});
 }
 		
+function deleteJob(req, cb) { 
 /*
 @method deleteJob
 @param {Object} req job query
 @param {Function} cb callback(sql,job) when job departs
 * >>> Not used but needs work
 */
-function deleteJob(req, cb) { 
 	
 	var sql = this;
 	sql.selectJob(req, function (job) {
@@ -1412,11 +1520,11 @@ function executeJob(req, exe) {
 	});
 }
 
+function flattenCatalog(flags, catalog, limits, cb) {
 /**
  @method flattenCatalog
  Flatten entire database for searching the catalog
  * */
-function flattenCatalog(flags, catalog, limits, cb) {
 	
 	function flatten( sql, rtns, depth, order, catalog, limits, cb) {
 		var table = order[depth];
@@ -1493,6 +1601,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 	} });
 }
 
+/*
 function smartTokens(q, opts) {
 	return q;
 	var 
@@ -1530,7 +1639,8 @@ function smartTokens(q, opts) {
 			return "?";
 	});
 }
-	
+*/
+
 function Trace(msg,sql) {
 	ENUM.trace("V>",msg,sql);
 }
@@ -1646,7 +1756,256 @@ function getTables(db, cb) {
 		}
 	});
 }
+
+function build(opts) {
+	var
+		sql = this,
+		pool = JSDB.mysql.pool,
+		escape = pool.escape,
+		escapeId = pool.escapeId,
+		ex = {
+			sql: "",
+			values: []
+		};
 	
+	function push( key, op ) {
+		if ( opt = opts[key] ) 
+			if ( add = op( opt ) ) {
+				ex.values.push( opt );
+				ex.sql += add;
+			}
+	}
+	
+	//Log(opts);
+	switch ( opts.crud ) {
+		case "select":
+			push( "nlp", (opt) => {
+				opts.as = new SQLOP( "nlp", "Score", opts.search||"", opt );
+				opts.having = [new SQLOP( ">", "Score", opts.score||0 )];
+			});
+			push( "bin", (opt) => {
+				opts.as = new SQLOP( "bin", "Score", opts.search||"", opt );
+				opts.having = [new SQLOP( ">", "Score", opts.score||0 )];
+			});
+			push( "qex", (opt) => {
+				opts.as = new SQLOP( "qex", "Score", opts.search||"", opt );
+				opts.having = [new SQLOP( ">", "Score", opts.score||0 )];
+			});	
+			push( "pivot", (opt) => {
+				var 
+					where = opts.where,
+					nodeID = where.NodeID || "root";
+
+				if (nodeID == "root") {
+					opts.idx = "group_concat(DISTINCT ID) AS NodeID, count(ID) AS NodeCount,false AS leaf,true AS expandable,false AS expanded";
+					opts.group = opt;
+					delete where.NodeID;
+				}
+
+				else {
+					opts.idx = `'${nodeID}' AS NodeID, 1 AS NodeCount, true AS leaf,true AS expandable,false AS expanded`;
+					opts.tests = [new SQLOP("node", ID, nodeID)];
+						// `instr(',${nodeID},' , concat(',' , ID , ','))`;
+					opts.group = null;
+				}
+			});
+			push( "browse", (opt) => {
+				var	
+					slash = "_", 
+					where = opts.where,
+					nodeID = where.NodeID,
+					nodes = nodeID ? nodeID.split(slash) : [],
+					pivots = opt.split(",");
+
+				opts.group = (nodes.length >= pivots.length)
+					? pivots.concat(["ID"])
+					: pivots.slice(0,nodes.length+1);
+
+				var name = pivots[nodes.length] || "concat('ID',ID)";
+				var path = me.group.Escape(",'"+slash+"',");
+
+				opts.idx = `cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
+						+ ", count(ID) AS NodeCount "
+						+ ", '/tbd' AS `path`, 1 AS `read`, 1 AS `write`, 'v1' AS `group`, 1 AS `locked`";
+
+				delete where.NodeID;
+				nodes.each( function (n,node) {
+					where[ pivots[n] || "ID" ] = node;
+				});
+			});
+			push( "index", (opt) => {
+				ex.values.push( opt.split(",") );
+			});			
+			push( "from", (opt) => {
+				return "SELECT SQL_CALC_FOUND_ROWS " 
+						+ (opts.index ? "??" : "*") // cant escape index due to expr AS key
+						+ (opts.as ? ","+opts.as.toSqlString() : "")
+						+ (opts.idx ? ","+opts.idx : "")
+						+ " FROM ??" ;
+			});
+			push( "join", (opt) => { 
+				var rtn = "";
+				Each( opts, function (src, on) {
+					rtn += `LEFT JOIN ${src} + " ON ${on}` ;
+				});
+				return rtn;
+			});
+			push( "where", (opt) => {
+				for (var key in opt) 
+					return " WHERE least(?,1)";
+			});
+			push( "tests", (opt) => {
+				var tests = [];
+				for (var key in opt) 
+					tests.push( new SQLOP( key.substr(-2), key.substr(0,key.length-2), opt[key] ) );
+					
+				if ( tests.length ) {
+					ex.values.push( tests );
+					if ( ex.sql.indexOf("WHERE") >= 0 ) ex.sql += " AND";
+					ex.sql += " WHERE least(?,1)";
+				}
+			});
+			push( "having", (opt) => " HAVING least(?,1)" );
+			push( "sort", (opt) => {
+				try {
+					var by = [];
+					opt.forEach( function (opt) {
+						var key = escapeId(opt.property);
+						by.push(`${key} ${opt.direction}`);
+					});
+					by = by.join(",");
+					if (by) ex.sql += ` ORDER BY ${by}`;
+				}
+				catch (err) {
+				}
+			});
+			push( "order", (opt) => {
+				ex.values.push( opt.split(",") );
+				ex.sql += " ORDER BY ??";
+			});
+			push( "group", (opt) => {
+				ex.values.push( opt.split(",") );
+				ex.sql += " GROUP BY ??";
+			});				
+			push( "limit", (opt) => " LIMIT ?" );
+			push( "offset", (opt) => " OFFSET ?" );
+			break;
+			
+		case "update":
+			push( "from", (opts) => "UPDATE ??" );
+			push( "set", (opts) => " SET ?" );
+			push( "where", (opt) => {
+				for (var key in opt) 
+					return " WHERE least(?,1)";
+			});
+			break;
+			
+		case "delete":
+			push( "from", (opts) => "DELETE FROM ??" );
+			push( "where", (opt) => {
+				for (var key in opt) 
+					return " WHERE least(?,1)";
+			});
+			break;
+			
+		case "insert":
+			push( "from", (opts) => "INSERT INTO ??" );
+			push( "set", (opts) => " SET ?" );
+			break;
+	}
+	
+	Log(this.format(ex.sql, ex.values) );
+	return ex;
+}
+
+function run(opts, emit, cb) {
+	var ex = this.build(opts);
+	
+	if (ex.sql) 
+		this.query( ex.sql, ex.values, function (err, info) {
+		
+			cb( err, info );
+
+			if ( emit && !err && opts.client ) // Notify other clients of change
+				emit( opts.query, {
+					path: "/"+opts.from+".db", 
+					body: opts.set, 
+					ID: opts.where.ID, 
+					from: opts.client
+					//flag: flags.client
+				});	
+
+		});
+}
+
+function hawk(log) {  // journal changes 
+	var sql = this;
+	
+	sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
+	.on("result", function (hawk) {
+		sql.query(
+			"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
+			Copy({
+				Hawk: hawk.Hawk,  	// moderator
+				Power: hawk.Power, 	// moderator's level
+				Updates: 1 					// init number of updates made
+			}, log), function (err) {
+				Log("journal", err);
+		});
+	});
+}
+		
+function SQLOP( op , key, val, search ) {
+	var mysql = JSDB.mysql.pool;
+	this.op = op;
+	this.search = search;
+	this.key = mysql.escapeId(key);
+	try {
+		this.val = mysql.escape( JSON.parse(val) );
+	}
+	catch (err) {
+		this.val = '"' + val + '"'; //mysql.escape(val);
+	}
+	//Log(this.op, this.key, this.val);
+}
+
+SQLOP.prototype.toSqlString = function () {
+	//Log(this.key, this.op, this.val);
+	switch ( this .op ) {
+		case "node":
+			return `instr( ',${this.val},' , concat(',' , ${this.key} , ','))`;
+		case "nlp":
+			return `MATCH(${this.search}) AGAINST(${this.val}) AS ${this.key}`;
+		case "bin":
+			return `MATCH(${this.search}) AGAINST(${this.val} IN BINARY MODE) AS ${this.key}`;
+		case "qex":
+			return `MATCH(${this.search}) AGAINST(${this.val} IN QUERY EXPANSION) AS ${this.key}`;
+		case "$=":
+			return `MATCH(${this.key}) AGAINST(${this.val})`;
+		case "^=":
+			return `MATCH(${this.key}) AGAINST(${this.val} IN BINARY MODE)` ;
+		case "|=":
+			return `MATCH(${this.key}) AGAINST(${this.val} WITH QUERY EXPANSION)` ;
+		case "%=":
+			return `${this.key} LIKE ${this.val}` ;
+		case "/=":
+			return `INSTR(${this.key}, ${this.val}` ;
+		case "*=":
+			var vals = this.val.split(",");
+			return `${this.key} BETWEEN ${vals[0]} AND ${vals[1]}` ;
+		case "<:":
+		case ">:":
+			return `${this.key}${this.op.substr(0,1)}${this.val}` ;
+		case "<=":
+		case ">=":
+		case "!=":
+			return `${this.key}${this.op}${this.val}` ;
+		default:
+			return "";
+	}
+}
+
+/*
 function smartFormat(query,args) {
 	var sql = this;
 	return query
@@ -1708,3 +2067,4 @@ function smartFormat(query,args) {
 		});
 		
 }
+*/
