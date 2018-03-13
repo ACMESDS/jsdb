@@ -10,68 +10,57 @@
 JSDB provides a JS-agnosticated interface to any (default MySQL-Cluster) database 
 as follows:
 	
-	JSDB.context( {ds1:{key:value, ... }, ds2:{key:value, ... }, ... }, function (ctx, sql) {
-		var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
+	JSDB.context( {ds1: ctx1, ds2: ctx2, ... }, function (ctx, sql) {
+		var ds1 = ctx.ds1, ds2 = ctx.ds2, ... ;
 	});
 
 or like:
 
 	JSDB.thread( function (sql) {
-		sql.context( {ds1:{key:value, ... }, ds2:{key:value, ... }, ... }, function (ctx) {
-			var ds1 = ctx.ds1, ds2 = ctx.ds2, ...;
+		sql.context( {ds1: ctx1, ds2: ctx2, ... }, function (ctx) {
+			var ds1 = ctx.ds1, ds2 = ctx.ds2, ... ;			
 		}).end();
 	});
 
 or as a lone dataset:
 
 	JSDB.thread( function (sql) {
-		var ds = new JSDB.DS(sql, {key:value, ... });
+		sql.ctx = ctx;
 	})
 
-where sql is a MySQL connector, the dataset {key:value, ... } attributes are described below, and
-where ds permits the following JS-agnosticated CRUD operations:
+where sql is a MySQL connector, the dataset context ctx = {key:value, ... } are described below, 
+and where the sql.ds permits the following JS-agnosticated CRUD operations:
 
-	ds.rec = { KEY:VALUE, ... }				// update matched record(s) 
-	ds.rec = [ {...}, {...}, ... ]							// insert record(s)
-	ds.rec = null 											// delete matched record(s)
-	ds.rec = function CB(recs,me) {...}			// select matched record(s)
+	sql.ds = { KEY:VALUE, ... }				// update matched record(s) 
+	sql.ds = [ {...}, {...}, ... ]							// insert record(s)
+	sql.ds = null 											// delete matched record(s)
+	sql.ds = function CB(recs,sql) {...}			// select matched record(s)
+	sql.ds = "select" | "insert" | "update" | "delete" 	// locking-unlocking a record
 
-with callback to a CB = each | all | clone | trace method with each/all record(s) matched 
-by .where, indexed by  .index, ordered by .order, grouped by .group, filtered by .having 
-and limited by .limit keys defined below.
+with callback to the CB = each | all | clone | trace method with each/all record(s) matched 
+by its current sql.ctx context.
 
-Alternatively, queries can be issued like this:
+The allowed (*from* is mandatory) context ctx ={ key: value, ... } keys are:
 
-	ds.res = callback() { ... }
-	ds.data = [ ... ]
-	ds.rec = CRUDE
-
-or in record-locked mode using:
-
-	ds.rec = "lock." + CRUDE
-
-where CRUDE = "select" | "delete" | "update" | "insert" | "execute".
-
-Basic { key: value, ... } attributes are as follows:
-
-	from: DB.TABLE || TABLE
-	where: 	{KEY:VALUE, ... }
-	tests: [ TEST, .... ]
-	res: function CB(ds) {...}
-	having: {KEY:VALUE, ... }
-	order: KEY, ...
+	crud: "select" | "insert" | "update" | "delete"
+	from: "DB.TABLE" || "TABLE"
+	where: 	{ KEY:VALUE, ... }
+	tests: [ SQLOP, .... ]
+	having: { KEY:VALUE, ... }
+	set: { KEY:VALUE, ... }
+	order: "KEY, ..."
 	sort: [ {property:KEY, direction:ORDER}, ... ]
-	group: KEY, ...
-	nlp: KEY
-	bin: KEY
-	qex: KEY
-	pivot: KEY, ...
-	browse: KEY, ...
+	group: "KEY, ..."
+	nlp: "KEY, ..."
+	bin: "KEY, ..."
+	qex: "KEY, ..."
+	pivot: "KEY, ..."
+	browse: "KEY, ..."
 	limit: VALUE
 	offset: VALUE
-	index: KEY, ...
+	index: "KEY, ..."
 	trace: true | false	
-	search: PATTERN
+	search: "PATTERN"
 	track: true | false
 
 	// legacy:
@@ -79,29 +68,23 @@ Basic { key: value, ... } attributes are as follows:
 	// journal: true | [false] 		// enable table journalling (legacy)
 	// ag: "..." 		// aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
 
-PATTERN should have a toSqlString method that renders a "KEY OP VAL" expression where
-OP is typically one of [ $"<>!*/| ] to implement relational searches (eg. has, natural language, 
-binary, query expansion, etc).
+SQLOP should have a toSqlString method that renders a "KEY OP VAL" expression to 
+implement relational searches (eg. has, natural language, binary, query expansion, etc).
 
-Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
-was configured), and willjournal the change when jounalling is enabled.
+Non-select queries will broadcast a change to all clients if a where.ID is presented (and an 
+emiitter was configured), and willjournal the change when jounalling is enabled.
 
-JSDB adds the following methods to the sql connector:
+JSDB also provides the following methods to the sql connector:
 
-		context: establish datasets
-		key getters: getKeys, getFields, jsonKeys, searchKeys, geometryKeys, textKeys
-		enumerators: forFirst, forEach, forAll
-		chaining: then, error, end
-		misc utils: cache, flattenCatalog
-		bulk insersion: beginBulk, endBulk
-		job processing: selectJob, deleteJob, updateJob, insertJob, executeJob
+		context> establish datasets
+		key getters> getKeys, getFields, jsonKeys, searchKeys, geometryKeys, textKeys
+		enumerators> forFirst, forEach, forAll
+		chaining> then, error, end
+		misc> cache, flattenCatalog
+		bulk insersion> beginBulk, endBulk
+		job processing> selectJob, deleteJob, updateJob, insertJob, executeJob
 		
-and, in addition to the basic context starters:
-
-		JSDB.thread( function cb(sql) {...} )
-		JSDB.context( dsctx, function cb(ctx, sql) {...} )
-		
-JSDB also provides enumerators that auto-release its sql connector:
+and several auto-release enumerators:
 
 		JSDB.forFirst( trace, query, args, function cb(rec, sql) {...} )
 		JSDB.forEach( trace, query, args, function cb(rec, sql) {...} )
@@ -118,6 +101,7 @@ app.X 	Scanned for tables that possess fulltext searchable fields.
 
 ## Use
 JSDB is configured and started like this:
+THIS NEEDS UPDATING
 
 	var JSDB = require("../jsdb").config({
 			key: value, 						// set key

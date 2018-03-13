@@ -63,6 +63,7 @@ var
 				sqlThread( function (sql) {
 
 					ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
+						
 						// key getters
 						getKeys,
 						getFields,
@@ -97,14 +98,131 @@ var
 						deleteJob,
 						updateJob,
 						insertJob,
-						executeJob
-						
+						executeJob						
 					]);
 
 					sql.query("DELETE FROM openv.locks");
 
-					//cb(sql);
+					Object.defineProperties( sql.constructor.prototype, {
+						ctx: {
+							get: function () { 
+								return this._ctx; 
+							},
+							set: function (ctx) { 
+								Log("set>>>>>>>>>>>", ctx); 
+																
+								this._ctx = Copy(ctx, {});
+							}
+						},
+						ds: {
+							get: function () {
+								return this._ctx.err;
+							},
+							set: function (req) {
+								var 
+									ctx = this._ctx,
+									sql = this,
+									query = ctx.where,
+									emitter = JSDB.io.sockets.emit;									
 
+								switch ((req||0).constructor) {
+									case Function:  // select
+										ctx.crud = "select";
+										switch (req.name) {
+											case "each":
+												return sql.run( ctx, null, function (err,recs) {
+													recs.forEach( function (rec) {
+														req(rec, me);
+													});
+												});
+
+											case "clone":
+											case "trace":
+												return;
+
+											case "all":
+											default:
+												return sql.run( ctx, null, function (err,recs) {
+													req(recs, me);
+												});				
+										}
+										break;
+										
+									case Array:		// insert
+										ctx.crud = "insert";
+										req.forEach( function (rec) {
+											ctx.set = rec;
+											sql.run( ctx, emitter, function (err,info) {
+												ctx.err = err;
+											});
+										});	
+										break;
+										
+									case Object:		// update
+										ctx.crud = "update";
+										ctx.set = req;
+										if ( query.ID ) 
+											sql.run( ctx, emitter, function (err,info) {
+												ctx.err = err;
+
+												if (true) {  // update change journal if enabled
+													sql.hawk({Dataset:ds, Field:""});  // journal entry for the record itself
+													if (false)   // journal entry for each record key being changed
+														for (var key in req) { 		
+															sql.hawk({Dataset:ds, Field:key});
+															sql.hawk({Dataset:"", Field:key});
+														}
+												}
+											});
+										break;
+										
+									case Number:  // delete
+										if ( query.ID ) {
+											ctx.crud = "delete";
+											sql.run( ctx, emitter, function (err,info) {
+												ctx.err = err;
+											});
+										}
+										break;
+										
+									case String:		// locking / unlocking
+										if (query.ID)
+										switch (req) {
+											case "select":
+												sql.unlock(query.ID, function () {  // unlocked
+													//res( rec );
+												}, function () {  // locked
+													//res( rec );
+												});
+												break;
+
+											case "delete":
+												sql.unlock(query.ID, function () {  // delete if unlocked
+													sql.ds = null;
+												});
+												break;
+
+											case "insert":
+												sql.unlock(query.ID, function () { // insert if unlocked
+													sql.ds = [ctx.set];
+												});
+												break;
+
+											case "update":
+												sql.unlock(query.ID, function () {  // update if unlocked
+													sql.ds = ctx.set;
+												});
+												break;
+
+											case "execute":
+												ctx.err = JSDB.errors.noExe;
+												break;										
+										}	
+								}
+							}
+						}
+					}); 
+					
 					var 
 						attrs = JSDB.attrs,
 						dsFrom = "app",
@@ -176,902 +294,6 @@ var 											// totem bindings
 	Copy = ENUM.copy,
 	Each = ENUM.each,
 	Log = console.log;
-
-function DATASET(sql,ats) {  // create dataset with given sql connector and attributes
-
-	if (ats.constructor == String) ats = {table:ats};
-
-	if (ats.table) {  // default then override attributes			
-		var attrs = JSDB.attrs[ats.table] || JSDB.attrs.default; 
-
-		for (var n in attrs)
-			switch (n) {
-				case "select":
-				case "update":
-				case "delete":
-				case "insert":
-					this.prototype[n] = attrs[n];
-					break;
-				default:	
-					this[n] = attrs[n];
-			}
-
-		this.sql = sql;  	// sql connector
-		this.err = null;	// default sql error response
-
-		for (var n in ats) this[n] = ats[n];
-	}
-
-	else
-		Trace(JSDB.errors.noTable+"");
-}
-
-/*
-CRUD interface ds.rec = req where req is an
-		Error: respond with error req
-		Array: respond with statis on inserting records req into ds
-		Object: respond with status on updating ds with req record then respond with status
-		null: respond with status on deleting records matching ds attributes
-		Function: respond on req callback with ds records matching ds attributes
-		"X": dataset CRUD (ds.rec = ds.data) X=select,update,delete,create,execute 
-		"lock.X": lock/unlock record for dataset CRUD
-*/
-DATASET.prototype = {  // need to rework this with calls to sql.run
-	
-	/*
-	x: function xquery(opt,key,buf) {  // query builder extends me.query and me.opts
-		
-		var 
-			me = this,  			// target ds 
-			keys = key.split(" "),  // key the the sql command
-			ag = keys[1] || "least(?,1)",  // method to aggregrate 
-			type = opt ? opt.constructor : null;
-			
-		if (type) 
-			switch (keys[0]) {
-
-				case "BROWSE":
-
-					var	
-						slash = "_", 
-						where = me.where,
-						nodeID = where.NodeID,
-						nodes = nodeID ? nodeID.split(slash) : [],
-						pivots = opt.split(",");
-
-					me.group = (nodes.length >= pivots.length)
-						? pivots.concat(["ID"])
-						: pivots.slice(0,nodes.length+1);
-
-					var name = pivots[nodes.length] || "concat('ID',ID)";
-					var path = me.group.Escape(",'"+slash+"',");
-
-					me.query += `, cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
-							+ ", count(ID) AS NodeCount "
-							+ ", '/tbd' AS `path`, 1 AS `read`, 1 AS `write`, 'v1' AS `group`, 1 AS `locked`";
-
-					delete where.NodeID;
-					nodes.each( function (n,node) {
-						where[ pivots[n] || "ID" ] = node;
-					});
-					break;
-					
-				case "PIVOT":
-					
-					var 
-						where = me.where,
-						nodeID = where.NodeID || "root";
-
-					if (nodeID == "root") {
-						me.query += ", group_concat(DISTINCT ID) AS NodeID, count(ID) AS NodeCount,false AS leaf,true AS expandable,false AS expanded";
-						me.group = opt;
-						delete where.NodeID;
-					}
-					
-					else {
-						me.query += `, '${nodeID}' as NodeID, 1 AS NodeCount, true AS leaf,true AS expandable,false AS expanded`;
-						me.where = `instr(',${nodeID},' , concat(',' , ID , ','))`;
-						me.group = null;
-					}
-					
-					break;
-					
-				case "":
-				case "IN":
-				case "WITH":
-				
-					if (me.search) {
-						me.query += `,MATCH(${me.search}) AGAINST('${opt}' ${key}) AS Score`;
-						me.having = me.score ? "Score>"+me.score : ["Score"];
-						me.searching = opt;
-					}
-					break;
-				
-				case "HAS":
-				
-					if (me.search) {
-						me.query += `,instr(concat(${me.search}),'${opt}') AS Score`;
-						me.having = me.score ? "Score>"+me.score : ["Score"];
-						me.searching = opt;
-					}
-					break;
-
-				case "SELECT":
-
-					switch (type) {
-						case Array:
-							me.query += ` ${key} ??`;
-							me.opts.push(opt);
-							break;
-
-						case String:
-							if (opt == "*") 
-								me.query += ` ${key} *`;
-							
-							else {
-								me.query += ` ${key} ${opt}`;
-								me.unsafe = true;
-							}
-							break;
-
-						/ *
-						case Object:
-							
-							if (opt.idx) 
-								me.x(opt.idx, key);
-							
-							else {
-								me.query += ` ${key} *`;
-								me.x(opt.nlp, "");
-								me.x(opt.bin, "IN BINARY MODE");
-								me.x(opt.qex, "WITH QUERY EXPANSION");
-								me.x(opt.has,"HAS");
-								me.x(opt.browse, "BROWSE");
-								me.x(opt.pivot, "PIVOT");
-							}
-							break;
-						* /
-					}	
-					
-					me.x(me.index, "INDEX");
-
-					/ *
-					if ( me.geo )  // any geometry fields are returned as geojson
-						me.query += ","+me.geo;
-					* /
-					
-					break;
-
-				case "JOIN":
-					
-					switch (type) {
-						case Array:
-							me.query += ` ${mode} ${key} ON ?`;
-							me.opts.push(opt);
-							break;
-							
-						case String:
-							me.query += ` ${mode} ${key} ON ${opt}`;
-							break;
-
-						case Object:
-
-							var mode = opt.left ? "left" : opt.right ? "right" : "";
-
-							me.query += ` ${mode} ${key} ? ON least(?,1)`;
-							
-							for (var n in opt.on) 
-								buf[n] = me.table+"."+opt.on[n];
-								
-							me.opts.push(opt[mode]);
-							me.opts.push(buf);
-							break;
-					}
-					break;
-				
-				case "LIMIT":
-					
-					switch (type) {
-						case Array:
-							me.query += ` ${key} ?`;
-							me.opts.push(opt);
-							break;
-							
-						case String:
-							me.query += ` ${key} ?`;
-							me.opts.push(opt.split(","));
-							break;
-
-						case Object:
-							me.query += ` ${key} ?`;
-							me.opts.push([opt.start,opt.count]);
-							break;								
-					}
-					break;
-				
-				case "WHERE":
-				case "HAVING":
-
-					me.nowhere = false;
-
-					switch (type) {
-						case Array:
-							
-							me.query += ` ${key} ??`;
-							me.opts.push(opt);
-							break;
-							
-						case String:
-						
-							me.safe = false;
-							me.query += ` ${key} ${opt}`;
-							break;
-
-						case Object:
-							var rels = []; 
-							
-							for (var n in opt) { 			// recast and remove unsafes
-								var test = opt[n];
-								
-								if (test == null) {		// using unsafe expression query (e.g. &x<10)
-									me.safe = false;
-									rels.push(n);
-									delete opt[n];
-								}
-								else 
-									switch (test.constructor) {
-										case Array:   // using range query e.g. x=[min,max]
-
-											delete opt[n];
-											switch (test.length) {
-												case 0:
-													rels.push( n.Escape() +" IS null" );
-													break;
-
-												case 2:
-													rels.push(n.Escape() + " BETWEEN " + test[0] + " AND " + test[1] );
-													break;
-
-												default:
-											}
-											break;
-											
-										case Object:  // using search query e.g. x={nlp:pattern}
-											
-											var fld = n.Escape();
-											if (pat = test.nlp) 
-												rels.push( `MATCH(${fld}) AGAINST('${pat}')` );
-											else
-											if (pat = test.bin)
-												rels.push( `MATCH(${fld}) AGAINST('${pat}') IN BINARY MODE` );
-											else
-											if (pat = test.qex)
-												rels.push( `MATCH(${fld}) AGAINST('${pat}') WITH QUERY EXPANSION` );
-											else
-											if (pat = test.has)
-												rels.push( `INSTR(${fld}, '${pat}')` );
-											else
-											if (pat = test.like)
-												rels.push( `${fld} LIKE '${pat}'` );
-											else
-												break;
-												
-											delete opt[n];
-											break;
-											
-										case String:   // otherwise using safe query e.g x=value
-										default:
-									}
-							}
-							
-							for (var n in opt) { 			// aggregate where clause using least,sum,etc
-								rels.push(ag);
-								me.opts.push(opt);
-								break;
-							}
-									
-							rels = rels.join(" AND "); 		// aggregate remaining clauses
-							if (rels)
-								me.query += ` ${key} ${rels}`;
-								
-							else
-								me.nowhere = true;
-							
-							break;
-							
-						default:
-								me.unsafe = true;
-					}
-					break;
-					
-				case "ORDER":
-					
-					switch (type) {
-						case Array:
-							var by = [];
-							opt.each(function (n,opt) {
-								if (opt.property)
-									by.push(`${opt.property} ${opt.direction}`);
-								else
-									for (var n in opt) 
-										by.push(`${n} ${opt[n]}`);
-							});
-							me.query += ` ${key} ${by.join(",")}`;
-							break;
-							
-						case String:
-							me.query += ` ${key} ??`;
-							me.opts.push(opt.split(","));
-							break;
-
-						case Object:
-							break;
-					}
-					break;
-					
-				case "SET":
-					
-					switch (type) {
-						/ *case Array:
-							me.safe = false;
-							me.query += ` ${key} ??`;
-							me.opts.push(opt);
-							break;* /
-							
-						case String:
-							me.safe = false;
-							me.query += ` ${key} ${opt}`;
-							break;
-
-						case Object:
-							
-							me.query += ` ${key} ?`;
-							
-							/ *
-							for (var n in opt) {  // object subkeys are json fields
-								var js = opt[n];
-								if (typeof js == "object") {
-									var js = JSON.stringify(js);
-									me.query += `,json_merge(${n},${js})`;
-									delete opt[n];
-								}
-							* /
-							
-							me.opts.push(opt);
-							break;
-							
-						default:
-							me.unsafe = true;
-					}
-					break;
-					
-				case "INDEX":
-					//console.log(opt);
-					me.x(opt.nlp, "");
-					me.x(opt.bin, "IN BINARY MODE");
-					me.x(opt.qex, "WITH QUERY EXPANSION");
-					me.x(opt.has,"HAS");
-					me.x(opt.browse, "BROWSE");
-					me.x(opt.pivot, "PIVOT");
-					break;
-					
-				default:
-					
-					switch (type) {
-						case Array:
-							me.query += ` ${key} ??`;
-							me.opts.push(opt);
-							break;
-							
-						case String:
-							me.query += ` ${key} ??`;
-							me.opts.push(opt.split(","));
-							break;
-
-						case Object:
-							me.query += ` ${key} ?`;
-							me.opts.push(opt);
-							break;
-					}
-			}
-
-	},
-	*/
-	
-	update: function (req,res) { // update record(s) in dataset
-
-		var 
-			me = this,
-			query = this.where,
-			body = req,
-			emitter = JSDB.io.sockets.emit;
-		
-		/*
-		function hawkChange(log) {  // journal changes 
-			sql.query("SELECT * FROM openv.hawks WHERE least(?,Power)", log)
-			.on("result", function (hawk) {
-//console.log(hawk);
-				sql.query(
-					"INSERT INTO openv.journal SET ? ON DUPLICATE KEY UPDATE Updates=Updates+1",
-					Copy({
-						Hawk: hawk.Hawk,  	// moderator
-						Power: hawk.Power, 	// moderator's level
-						Updates: 1 					// init number of updates made
-					}, log)
-				);
-			});
-		}
-		
-		var	
-			me = this,
-			table = me.table,
-			ID = me.where.ID,
-			client = me.client,
-			sql = me.sql;
-		
-		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
-			
-		me.x(table, "UPDATE");
-		me.x(req, "SET");
-		me.x(me.where, "WHERE "+me.ag);
-		me.x(me.order, "ORDER BY");
-		
-		if (me.nowhere)
-			res( JSDB.errors.unsafeQuery );
-
-		else
-		if ( Each(req) ) // empty so ....
-			res( JSDB.errors.nillUpdate );
-		
-		else
-		if (me.safe || me.unsafeok) {
-			/ *
-			//uncomment to disable journalling
-			me.journal = false;
-			* /
-			
-			if (me.journal) {  // attempt change journal if enabled
-				hawkChange({Dataset:me.table, Field:""});  // journal entry for the record itself
-				/ *
-				// uncomment to enable
-				for (var key in req) { 		// journal entry for each record key being changed
-					hawk({Dataset:me.table, Field:key});
-					hawk({Dataset:"", Field:key});
-				}
-				* /
-			}
-			
-			sql.query(me.query, me.opts, function (err,info) {
-
-				if (res) res( err || info );
-
-				if (JSDB.io.sockets.emit && ID && !err) 		// Notify clients of change.  
-					JSDB.io.sockets.emit( "update", {
-						path: "/"+me.table+".db", 
-						body: req, 
-						ID: ID, 
-						from: client
-						//flag: flags.client
-					});
-
-			});
-
-			if (me.trace) Trace(me.query);
-		}
-		
-		else
-		if (res)
-			res( JSDB.errors.unsafeQuery );
-		*/
-		
-		if ( query.ID )
-			sql.run( Copy( me, {
-				crud: "update",
-				set: body
-			}), emitter, function (err,info) {
-
-				//Log(info);
-				res( err || info );
-
-				if (true) {  // update change journal if enabled
-					sql.hawk({Dataset:ds, Field:""});  // journal entry for the record itself
-					if (false)   // journal entry for each record key being changed
-						for (var key in req) { 		
-							sql.hawk({Dataset:ds, Field:key});
-							sql.hawk({Dataset:"", Field:key});
-						}
-				}
-
-			});
-		
-	},
-	
-	select: function (req,res) { // select record(s) from dataset
-		
-		var 
-			me = this,
-			sql = this.sql;
-			
-		switch (req.name) {
-			case "each":
-				return sql.run( Copy( me, {
-					crud: "select"
-				}), null, function (err,recs) {
-
-					recs.forEach( function (rec) {
-						req(rec, me);
-					});
-
-				});
-				
-			case "clone":
-			case "trace":
-				return;
-				
-			case "all":
-			default:
-				return sql.run( Copy( me, {
-					crud: "select"
-				}), null, function (err,recs) {
-
-					req(recs, me);
-
-				});				
-		}
-		
-		/*
-		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true; 
-		
-		me.x(me.index.select, "SELECT SQL_CALC_FOUND_ROWS");
-		me.x(table, "FROM");
-		me.x(me.join, "JOIN", {});
-		me.x(me.where, "WHERE "+me.ag);
-		me.x(me.having, "HAVING "+me.ag);
-		me.x(me.order, "ORDER BY");
-		me.x(me.group, "GROUP BY");
-		me.x(me.limit, "LIMIT");
-
-		if (me.safe || me.unsafeok)
-			switch (req.name) {
-				case "each": 
-					sql.query(me.query, me.opts)
-					.on("error", function (err) {
-						req(err,me);
-					})						
-					.on("result", function (rec) {
-						req(rec,me);
-					});
-					break;
-				
-				case "clone": 
-					var rtn = [];
-					sql.query(me.query, me.opts, function (err,recs) {	
-						if (err) 
-							return req( err, me );
-						
-						recs.each(function (n,rec) {
-							rtn.push( new Object( rec ) );
-						});
-						
-						req(rtn,me);
-					});
-					break;
-				
-				case "trace":
-					Trace(me.query);
-					sql.query(me.query, me.opts, function (err,recs) {	
-						req( err || recs, me );
-					});
-					break;
-					
-				case "all":
-				default:  
-					sql.query(me.query, me.opts, function (err,recs) {
-						
-						if (me.track && me.searching && recs)  // track searches if tracking
-							sql.query(
-								"INSERT INTO openv.tracks SET ? ON DUPLICATE KEY UPDATE Searched=Searched+1,Returned=Returned+?", [
-									{	Client: client,
-									 	Searching: me.searching,
-									 	Searched: 0,
-									 	Within: me.table,
-									 	Returned: recs.length
-									}, recs.length
-								]);
-						
-						req( err || recs, me );
-					});
-			}
-		
-		else
-		if (res)
-			res( JSDB.errors.unsafeQuery );
-		
-		if (me.trace) Trace(me.query);
-		*/
-	},
-	
-	delete: function (req,res) {  // delete record(s) from dataset
-		
-		var 
-			me = this,
-			query = this.where,
-			sql = this.sql,
-			emitter = JSDB.io.sockets.emit;
-		
-		if ( query.ID )
-			sql.run( Copy( me, {
-				crud: "delete"
-			}), emitter, function (err,info) {
-
-				//Log(info);
-				res( err || info );
-
-			});	
-		/*
-		var	
-			me = this,
-			table = me.table,
-			ID = me.where.ID,
-			client = me.client,
-			sql = me.sql;
-		
-		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true;
-		
-		me.x(table, "DELETE FROM");
-		me.x(me.where, "WHERE "+me.ag);
-		
-		if (me.nowhere)
-			res( JSDB.errors.unsafeQuery );	
-		
-		else
-		if (me.safe || me.unsafeok) {
-			me.sql.query(me.query, me.opts, function (err,info) {
-
-				if (me.res) me.res(err || info);
-
-				if (JSDB.io.sockets.emit && ID && !err) 		// Notify clients of change.  
-					JSDB.io.sockets.emit( "delete", {
-						path: "/"+me.table+".db", 
-						ID: ID, 
-						from: me.client
-						//flag: flags.client
-					});
-
-			});
-
-			if (me.trace) Trace(me.query);
-		}
-	
-		else
-		if (res)
-			res( JSDB.errors.unsafeQuery );		
-		*/
-	},
-	
-	insert: function (req,res) {  // insert record(s) into dataset
-		
-		var
-			me = this,
-			query = this.where,
-			body = req,
-			emitter = JSDB.io.sockets.emit;
-		
-		if (body.constructor == Array)
-			body.forEach( function (rec) {
-				sql.run( Copy( me, {
-					crud: "insert",
-					set: rec
-				}), emitter, function (err,info) {
-
-					//Log(info);
-					res( err || info );
-
-				});
-			});
-
-		else
-			sql.run( Copy( me, {
-				crud: "insert",
-				set: body
-			}), emitter, function (err,info) {
-
-				//Log(info);
-				res( err || info );
-
-			});
-
-		/*
-		var	
-			me = this,
-			table = me.table,
-			ID = me.where.ID,
-			client = me.client,
-			sql = me.sql;
-		
-		me.opts = []; me.query = ""; me.safe = true; me.nowhere=true; 
-		
-		if (!req.length) req = [{}];   // force at least one insert attempt
-		
-		req.each(function (n,rec) { // insert each record
-			
-			sql.query(
-				me.query = Each(rec)  // trap empty records
-					? "INSERT INTO ?? VALUE ()"  
-					:  "INSERT INTO ?? SET ?" ,
-
-				[table,rec], 
-				
-				function (err,info) {
-
-					if (!n && res) { 					// respond only to first insert
-						res( err || info );
-
-						if (JSDB.io.sockets.emit && !err) 		// Notify clients of change.  
-							JSDB.io.sockets.emit( "insert", {
-								path: "/"+me.table+".db", 
-								body: rec, 
-								ID: info.insertId, 
-								from: client
-								//flag: flags.client
-							});
-					}			
-
-			});
-
-			if (me.trace) Trace(me.query);
-		});
-		*/
-	},
-
-	get rec() {   // reserved
-	},
-	
-	unlock: function (ID, cb, lockcb) {  			// unlock record 
-		var 
-			me = this,
-			sql = me.sql,
-			lockID = {Lock:`${me.table}.${ID}`, Client:me.client};
-		
-		if (ID)
-			sql.query(  // attempt to unlock a locked record
-				"DELETE FROM openv.locks WHERE least(?)", 
-				lockID, 
-				function (err,info) {
-
-				if (err)
-					me.res( JSDB.errors.failLock );
-
-				else
-				if (info.affectedRows) {  // unlocked so commit queued queries
-					cb();
-					sql.query("COMMIT");  
-				}
-
-				else 
-				if (lockcb)  // attempt to lock this record
-					sql.query(
-						"INSERT INTO openv.locks SET ?",
-						lockID, 
-						function (err,info) {
-
-						if (err)
-							me.res( JSDB.errors.isLocked );
-
-						else
-							sql.query( "START TRANSACTION", function (err) {  // queue this transaction
-								lockcb();
-							});
-					});	
-
-				else  // record was never locked
-					me.res( JSDB.errors.isUnlocked );
-
-			});
-		
-		else
-			me.res( JSDB.errors.noLock );
-	},
-
-	set rec(req) { 									// crud interface
-		var 
-			me = this, 
-			res = me.res;
-		
-		if (req) 
-			switch (req.constructor) {
-				case Error:
-				
-					if (res) res(req);
-					break;
-					
-				case Array: 
-
-					me.insert(req,res);
-					break;
-					
-				case Object:
-
-					me.update(req,res);
-					break;
-					
-				case Function:
-					me.select(req,res);
-					break;
-					
-				case String:
-				
-					if (me.trace) Trace(
-						`${req.toUpperCase()} ${me.table} FOR ${me.client}`
-					);
-				
-					switch (req) {
-						case "lock.select":
-
-							me.rec = function (recs) {  // get records
-
-								if (recs.constructor == Error) 
-									res( recs );
-								
-								else
-								if (rec = recs[0]) 
-									me.unlock(rec.ID, function () {  // unlocked
-										res( rec );
-									}, function () {  // locked
-										res( rec );
-									});
-								
-								else
-									res( JSDB.errors.noRecord );
-								
-							};
-							break;
-						
-						case "lock.delete":
-							
-							me.unlock(me.where.ID, function () {  // delete if unlocked
-								me.rec = null;
-							});
-							break;
-													
-						case "lock.insert":
-
-							me.unlock(me.where.ID, function () { // insert if unlocked
-								me.rec = [me.data];
-							});
-							break;
-							
-						case "lock.update":
-
-							me.unlock(me.where.ID, function () {  // update if unlocked
-								me.rec = me.data;
-							});
-							break;
-							
-						case "lock.execute":
-							
-							res( JSDB.errors.noExe );
-							break;
-
-						case "select": me.rec = me.res; break;
-						case "update": me.rec = me.data; break;
-						case "delete": me.rec = null; break;
-						case "insert": me.rec = [me.data]; break;
-						case "execute": me.rec = JSDB.errors.unsupportedQuery; break;
-						
-						default:
-							me.rec = JSDB.errors.invalidQuery;
-					}
-
-			}
-		
-		else 
-			me.delete(req,res);
-		
-		return this;
-	}
-	
-}
 
 function getKeys(table, type, keys, cb) {
 	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, function (err, recs) {
