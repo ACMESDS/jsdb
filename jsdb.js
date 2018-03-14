@@ -76,6 +76,7 @@ var
 						// record enumerators
 						build,
 						run,
+						relock,
 						forFirst,
 						forEach,
 						forAll,
@@ -109,9 +110,8 @@ var
 								return this._ctx; 
 							},
 							set: function (ctx) { 
-								Log("set>>>>>>>>>>>", ctx); 
-																
-								this._ctx = Copy(ctx, {});
+								Log("sql set>>>>>>>>>>>", ctx); 					
+								this._ctx = ctx;
 							}
 						},
 						ds: {
@@ -186,38 +186,18 @@ var
 										break;
 										
 									case String:		// locking / unlocking
-										if (query.ID)
-										switch (req) {
-											case "select":
-												sql.unlock(query.ID, function () {  // unlocked
-													//res( rec );
-												}, function () {  // locked
-													//res( rec );
-												});
-												break;
+										sql.relock(function () {  // unlocked
+											switch (req) {
+												case "select": break;
+												case "delete": 	sql.ds = null; break;
+												case "update":	sql.ds = ctx.set; break;
+												case "insert":	sql.ds = [ctx.set]; break;
+											}
 
-											case "delete":
-												sql.unlock(query.ID, function () {  // delete if unlocked
-													sql.ds = null;
-												});
-												break;
-
-											case "insert":
-												sql.unlock(query.ID, function () { // insert if unlocked
-													sql.ds = [ctx.set];
-												});
-												break;
-
-											case "update":
-												sql.unlock(query.ID, function () {  // update if unlocked
-													sql.ds = ctx.set;
-												});
-												break;
-
-											case "execute":
-												ctx.err = JSDB.errors.noExe;
-												break;										
-										}	
+										}, function () {  // locked
+											//res( rec );
+										});
+										break;
 								}
 							}
 						}
@@ -1140,24 +1120,40 @@ function build(opts) {
 	return ex;
 }
 
-function run(opts, emit, cb) {
-	var ex = this.build(opts);
+function run(ctx, emit, cb) {
+	var ex = this.build(ctx);
 	
 	if (ex.sql) 
-		this.query( ex.sql, ex.values, function (err, info) {
-		
-			cb( err, info );
+		if ( ctx.lock ) {
+			sql.ctx = ctx;
+			sql.relock( function () {  // sucessfully unlocked
+				switch (ctx.crud) {
+					case "select": break;
+					case "delete": 	sql.ds = null; break;
+					case "update":	sql.ds = ctx.set; break;
+					case "insert":	sql.ds = [ctx.set]; break;
+				}
+				cb( sql.ctx.err, null );
+			}, function () {  // sucessfully locked
+				cb( sql.ctx.err, null );
+				//res( rec );
+			});
+		}
 
-			if ( emit && !err && opts.client ) // Notify other clients of change
-				emit( opts.query, {
-					path: "/"+opts.from+".db", 
-					body: opts.set, 
-					ID: opts.where.ID, 
-					from: opts.client
-					//flag: flags.client
-				});	
+		else			
+			this.query( ex.sql, ex.values, function (err, info) {
 
-		});
+				cb( err, info );
+
+				if ( emit && !err && ctx.client ) // Notify other clients of change
+					emit( ctx.query, {
+						path: "/"+ctx.from+".db", 
+						body: ctx.set, 
+						ID: ctx.where.ID, 
+						from: ctx.client
+					});	
+
+			});
 }
 
 function hawk(log) {  // journal changes 
@@ -1177,6 +1173,53 @@ function hawk(log) {  // journal changes
 	});
 }
 		
+function relock(unlockcb, lockcb) {  			// lock-unlock record 
+	var 
+		sql = this,
+		ctx = this.ctx,
+		ID = ctx.query.ID,
+		lockID = {Lock:`${ctx.from}.${ID}`, Client:ctx.client};
+
+	if (ID)
+		sql.query(  // attempt to unlock a locked record
+			"DELETE FROM openv.locks WHERE least(?)", 
+			lockID, 
+			function (err,info) {
+
+			if (err)
+				ctx.err = JSDB.errors.failLock;
+
+			else
+			if (info.affectedRows) {  // unlocked so commit queued queries
+				unlockcb();
+				sql.query("COMMIT");  
+			}
+
+			else 
+			if (lockcb)  // attempt to lock this record
+				sql.query(
+					"INSERT INTO openv.locks SET ?",
+					lockID, 
+					function (err,info) {
+
+					if (err)
+						ctx.err = JSDB.errors.isLocked;
+
+					else
+						sql.query( "START TRANSACTION", function (err) {  // queue this transaction
+							lockcb();
+						});
+				});	
+
+			else  // record was never locked
+				ctx.err = JSDB.errors.isUnlocked;
+
+		});
+
+	else
+		ctx.err = JSDB.errors.noLock;
+}
+
 function SQLOP( op , key, val, search ) {
 	var mysql = JSDB.mysql.pool;
 	this.op = op;
