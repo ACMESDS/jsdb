@@ -1035,12 +1035,40 @@ function build(opts) {
 					where[ pivots[n] || "ID" ] = node;
 				});
 			});
-			push( "index", (opt) => {
-				ex.values.push( opt.split(",") );
-			});			
 			push( "from", (opt) => {
+				var 
+					tests = opts.tests,
+					index = opts.index ? opts.index.split(",") : [];
+				
+				index.forEach( function (key, n) { 
+					index[n] = sql.escapeId(key); 
+				});
+				
+				for (var key in tests) 
+					if ( test = tests[key] )
+						if ( key.endsWith("$=") ) {
+							delete tests[key];
+							var 
+								key = key.substr(0, key.length-2),
+								keys = key.split("_"),
+								as = sql.escapeId( keys[1] || keys[0] ),
+								expr = sql.escape( "$."+test );
+
+							index.push( `json_extract( ${keys[0]}, ${expr} ) AS ${as}` );
+						}
+				
+					else
+					if ( key.endsWith("$:") ) {
+						delete tests[key];
+						var 
+							key = key.substr(0, key.length-2),
+							as = sql.escapeId( key );
+
+						index.push( `${test} AS ${as}` );
+					}
+						
 				return "SELECT SQL_CALC_FOUND_ROWS " 
-						+ (opts.index ? "??" : "*") // cant escape index due to expr AS key
+						+ (index.length ? index.join(",") : "*")
 						+ (opts.as ? ","+opts.as.toSqlString() : "")
 						+ (opts.idx ? ","+opts.idx : "")
 						+ " FROM ??" ;
