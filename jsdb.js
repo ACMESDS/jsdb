@@ -803,46 +803,6 @@ function flattenCatalog(flags, catalog, limits, cb) {
 	} });
 }
 
-/*
-function smartTokens(q, opts) {
-	return q;
-	var 
-		optn = 0,
-		args = (opts.constructor == Array) ? null : opts;
-	
-	return q.replace(/\?/g, function (mat,idx) {
-		var 
-			tests = ["?"] , 
-			quote = "`",
-			opt = args || opts[optn++];
-		
-		if ( opt.constructor == Object ) {
-			Each(opt, function (key,val) {
-				switch ( op = key.substr(-1) ) {
-					case "<":
-					case ">":
-					case "!":
-						tests.push( key + "=" + val );
-						delete opt[key];
-						break;
-					default:
-						if ( !val ) {
-							tests.push( key );
-							delete opt[key];
-						}
-				}
-			});
-			
-			Log("smart", tests, q);
-			return tests.join(",");
-		}
-		
-		else
-			return "?";
-	});
-}
-*/
-
 function Trace(msg,sql) {
 	ENUM.trace("V>",msg,sql);
 }
@@ -1040,33 +1000,33 @@ function build(opts) {
 					tests = opts.tests,
 					index = opts.index ? opts.index.split(",") : [];
 				
-				index.forEach( function (key, n) { 
+				index.forEach( function (key, n) { // indecies on index=key,... are safely escaped
 					index[n] = sql.escapeId(key); 
 				});
 				
-				for (var key in tests) 
+				for (var key in tests) // x$=expr and x:=expr are converted to indecies
 					if ( test = tests[key] )
 						if ( key.endsWith("$=") ) {
 							delete tests[key];
 							var 
-								key = key.substr(0, key.length-2),
-								keys = key.split("_"),
-								as = sql.escapeId( keys[1] || keys[0] ),
-								expr = sql.escape( "$."+test );
+								as = sql.escapeId( key.substr(0, key.length-2) ),
+								jsons = test.split(","),
+								exprs = [];
+							
+							Log(as,jsons,exprs);
+							if ( jsons.length>1) {
+								jsons.forEach( function (expr,n) {
+									if ( n ) exprs.push( sql.escape( "$"+expr ) );
+								});
 
-							index.push( `json_extract( ${keys[0]}, ${expr} ) AS ${as}` );
+								exprs = exprs.join(",");
+								index.push( `json_extract( ${jsons[0]}, ${exprs} ) AS ${as}` );
+							}
+							
+							else 
+								index.push( `${test} AS ${as}` );
 						}
 				
-					else
-					if ( key.endsWith("$:") ) {
-						delete tests[key];
-						var 
-							key = key.substr(0, key.length-2),
-							as = sql.escapeId( key );
-
-						index.push( `${test} AS ${as}` );
-					}
-						
 				return "SELECT SQL_CALC_FOUND_ROWS " 
 						+ (index.length ? index.join(",") : "*")
 						+ (opts.as ? ","+opts.as.toSqlString() : "")
@@ -1118,7 +1078,7 @@ function build(opts) {
 				ex.sql += " GROUP BY ??";
 			});				
 			push( "limit", (opt) => " LIMIT ?" );
-			push( "offset", (opt) => " OFFSET ?" );
+			//push( "offset", (opt) => " OFFSET ?" );
 			break;
 			
 		case "update":
