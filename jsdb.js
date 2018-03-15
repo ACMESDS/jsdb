@@ -1004,17 +1004,17 @@ function build(opts) {
 					index[n] = sql.escapeId(key); 
 				});
 				
-				for (var key in tests) // x$=expr and x:=expr are converted to indecies
+				for (var key in tests) // convert indecies like x$=key$expr$expr... and x$=expr
 					if ( test = tests[key] )
-						if ( key.endsWith("$=") ) {
+						if ( key.endsWith("$=") ) {  // have a $= key
 							delete tests[key];
 							var 
 								as = sql.escapeId( key.substr(0, key.length-2) ),
-								jsons = test.split(","),
+								jsons = test.split("$"),
 								exprs = [];
 							
 							Log(as,jsons,exprs);
-							if ( jsons.length>1) {
+							if ( jsons.length>1) {   // key$expr... form
 								jsons.forEach( function (expr,n) {
 									if ( n ) exprs.push( sql.escape( "$"+expr ) );
 								});
@@ -1023,7 +1023,7 @@ function build(opts) {
 								index.push( `json_extract( ${jsons[0]}, ${exprs} ) AS ${as}` );
 							}
 							
-							else 
+							else   // expr form
 								index.push( `${test} AS ${as}` );
 						}
 				
