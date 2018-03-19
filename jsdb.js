@@ -1013,7 +1013,7 @@ function build(opts) {
 								jsons = test.split("$"),
 								exprs = [];
 							
-							Log(as,jsons,exprs);
+							//Log(as,jsons,exprs);
 							if ( jsons.length>1) {   // key$expr... form
 								jsons.forEach( function (expr,n) {
 									if ( n ) exprs.push( sql.escape( "$"+expr ) );
