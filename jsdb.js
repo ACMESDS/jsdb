@@ -32,7 +32,7 @@ var
 			noRecord: new Error("no record found")
 		},
 
-		fetcher: null, 	//< defined by config 
+		fetcher: () => Trace("data fetcher not configured"), //< data fetcher
 		
 		attrs: {		//< reserved for dataset attributes derived during config
 			default:	{ 					// default dataset attributes
@@ -803,7 +803,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 }
 
 function Trace(msg,sql) {
-	ENUM.trace("V>",msg,sql);
+	ENUM.trace("B>",msg,sql);
 }
 
 function sqlThread(cb) {  // callback cb(sql) with a sql connection
