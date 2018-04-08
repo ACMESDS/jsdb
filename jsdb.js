@@ -1,11 +1,18 @@
 // UNCLASSIFIED
 
+/*
+To do:
++ Review and revise README.md
++ Update jsduck comments herein
+*/
+
 /**
- * @class JSDB
- * @requires cluster
- * @requires enum
- * @requires mysql
- */
+@class JSDB
+@requires cluster
+@requires enum
+@requires mysql
+See README.md for general usage. See /todos.view for ways to contribute.
+*/
 
 var 											// nodejs
 	CLUSTER = require("cluster");
@@ -52,7 +59,7 @@ var
 		
 		config: function (opts, cb) {  // callback cb(sql connection)
 			
-			if (opts) Copy(opts,JSDB);
+			if (opts) Copy(opts,JSDB,".");
 			
 			Trace("CONFIG JSDB");
 			
@@ -110,7 +117,7 @@ var
 								return this._ctx; 
 							},
 							set: function (ctx) { 
-								Log("sql set>>>>>>>>>>>", ctx); 					
+								Log("sql set>>>>>>>>>>>", ctx); 
 								this._ctx = ctx;
 							}
 						},
@@ -216,15 +223,18 @@ var
 								attr.search = keys.join(",");
 							});
 						});
-						
-						if (cb) cb(sql);
-						else
-							sql.release();
+
+						sql.release();
+
+						if (cb) cb(null);						
 					});
 					
 				});
 				
 			}
+			
+			else
+				cb( new JSDB.errors.noDB );
 			
 			return JSDB;
 		},
@@ -245,32 +255,7 @@ var
 	};
 
 var 											// totem bindings
-	ENUM = require("enum").extend({
-		/*  legacy soon
-		String: [
-			function Escape() {
-				var q = "`";
-				return q + escape(this) + q;
-			}
-		],
-				
-		Array: [
-			function Escape(slash,cb) {
-				var q = "`";
-				
-				if (cb) {
-					var rtn = [];
-					this.each(function (n,el) {
-						rtn.push( cb(el) );
-					});
-					return rtn.join(slash);
-				}
-				else						
-					return  q + this.join(slash ? `${q}${slash}${q}` : `${q},${q}`) + q;
-			}
-		]
-		*/
-	}),
+	ENUM = require("enum"),
 	Copy = ENUM.copy,
 	Each = ENUM.each,
 	Log = console.log;
@@ -1003,9 +988,9 @@ function build(opts) {
 					index[n] = sql.escapeId(key); 
 				});
 				
-				for (var key in tests) // convert indecies like x$=key$expr$expr... and x$=expr
+				for (var key in tests) // convert askey$=expr indicies
 					if ( test = tests[key] )
-						if ( key.endsWith("$=") ) {  // have a $= key
+						if ( key.endsWith("$=") ) {  // have an askey$=expr index
 							delete tests[key];
 							var 
 								as = sql.escapeId( key.substr(0, key.length-2) ),
@@ -1013,7 +998,7 @@ function build(opts) {
 								exprs = [];
 							
 							//Log(as,jsons,exprs);
-							if ( jsons.length>1) {   // key$expr... form
+							if ( jsons.length>1) {   // have a json extract key$=expression
 								jsons.forEach( function (expr,n) {
 									if ( n ) exprs.push( sql.escape( "$"+expr ) );
 								});
@@ -1022,7 +1007,7 @@ function build(opts) {
 								index.push( `json_extract( ${jsons[0]}, ${exprs} ) AS ${as}` );
 							}
 							
-							else   // expr form
+							else   // have an sql askey$=expression
 								index.push( `${test} AS ${as}` );
 						}
 				
@@ -1232,7 +1217,7 @@ SQLOP.prototype.toSqlString = function () {
 			return `MATCH(${this.search}) AGAINST(${this.val} IN BINARY MODE) AS ${this.key}`;
 		case "qex":
 			return `MATCH(${this.search}) AGAINST(${this.val} IN QUERY EXPANSION) AS ${this.key}`;
-		case "$=":
+		case "/=":
 			return `MATCH(${this.key}) AGAINST(${this.val})`;
 		case "^=":
 			return `MATCH(${this.key}) AGAINST(${this.val} IN BINARY MODE)` ;
@@ -1240,8 +1225,8 @@ SQLOP.prototype.toSqlString = function () {
 			return `MATCH(${this.key}) AGAINST(${this.val} WITH QUERY EXPANSION)` ;
 		case "%=":
 			return `${this.key} LIKE ${this.val}` ;
-		case "/=":
-			return `INSTR(${this.key}, ${this.val}` ;
+		//case "/=":
+		//	return `INSTR(${this.key}, ${this.val}` ;
 		case "*=":
 			var vals = this.val.split(",");
 			return `${this.key} BETWEEN ${vals[0]} AND ${vals[1]}` ;
@@ -1257,66 +1242,3 @@ SQLOP.prototype.toSqlString = function () {
 	}
 }
 
-/*
-function smartFormat(query,args) {
-	var sql = this;
-	return query
-		.replace("_?", function () {
-			var idx =0, rtn = [], where = args.where;
-			if (where)
-				for (var key in where) 
-					if ( val = where[key] ) {
-						op = key.substr(-1);
-						key = key.substr(0,key.length-1);
-						switch ( op ) {
-							case "$":
-								rtn.push( `MATCH(${key}) AGAINST("${val}")` );
-								break;
-							case "^":
-								rtn.push( `MATCH(${key}) AGAINST"${val}" IN BINARY MODE` );
-								break;
-							case "|":
-								rtn.push( `MATCH(${key}) AGAINST"${val}" WITH QUERY EXPANSION` );
-								break;
-							case "%":
-								rtn.push( `${key} LIKE "${val}"` );
-								break;
-							case "/":
-								rtn.push( `INSTR(${key}, "${val}"` );
-								break;
-							case "*":
-								var vals = val.split(",");
-								rtn.push( `${key} BETWEEN ${vals[0]} AND ${vals[1]}` );
-								break;
-							case "<":
-							case ">":
-							case "!":
-							default:
-								rtn.push( `${key}${op}=${val}` );
-								break;
-
-						}
-					}
-		
-					else 
-						rtn.push(key);
-		
-			return rtn.length ? rtn.join(",") : "1";
-		})
-		.replace("ORDER BY ??", function (x) {
-			var rtn = "";
-			if ( orderby = args.orderby )  
-				if ( orderby.length )
-					rtn = sql.format(x, orderby);
-			return rtn;
-		})
-		.replace("GROUP BY ??", function (x) {
-			var rtn = "";
-			if ( groupby = args.groupby )  
-				if ( groupby.length )
-					rtn = sql.format(x, groupby);
-			return rtn;
-		});
-		
-}
-*/
