@@ -305,8 +305,8 @@ function thenDo(cb) {
 function onEnd(cb) {  // on-end callback cb() and release connection
 	var sql = this;
 	this.q.on("end", function () {
-		sql.release();
 		if (cb) cb(sql);
+		sql.release();
 	});
 	return this;
 }
