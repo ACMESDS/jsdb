@@ -20,6 +20,8 @@ var 											// nodejs
 var												// 3rd party bindings
 	MYSQL = require("mysql");
 
+const { Copy,Each,Log } = require("enum");
+
 var
 	JSDB = module.exports = {
 		
@@ -61,7 +63,7 @@ var
 			
 			if (opts) Copy(opts,JSDB,".");
 			
-			Trace("CONFIG JSDB");
+			Log("CONFIG JSDB");
 			
 			if (mysql = JSDB.mysql) {
 				
@@ -69,7 +71,7 @@ var
 
 				sqlThread( function (sql) {
 
-					ENUM.extend(sql.constructor, [  // extend sql connector with useful methods
+					var ex = [  // extend sql connector with useful methods
 						
 						// key getters
 						getKeys,
@@ -107,7 +109,9 @@ var
 						updateJob,
 						insertJob,
 						executeJob						
-					]);
+					];
+					
+					ex.extend(sql.constructor);
 
 					sql.query("DELETE FROM openv.locks");
 
@@ -253,12 +257,6 @@ var
 		forFirst: sqlFirst,
 		context: sqlContext
 	};
-
-var 											// totem bindings
-	ENUM = require("enum"),
-	Copy = ENUM.copy,
-	Each = ENUM.each,
-	Log = console.log;
 
 function getKeys(table, type, keys, cb) {
 	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, function (err, recs) {
@@ -787,10 +785,6 @@ function flattenCatalog(flags, catalog, limits, cb) {
 	} });
 }
 
-function Trace(msg,sql) {
-	ENUM.trace("B>",msg,sql);
-}
-
 function sqlThread(cb) {  // callback cb(sql) with a sql connection
 
 	function dummyConnector() {
@@ -1242,3 +1236,6 @@ SQLOP.prototype.toSqlString = function () {
 	}
 }
 
+function Trace(msg,sql) {
+	msg.trace("B>",sql);
+}
