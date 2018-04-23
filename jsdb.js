@@ -1,11 +1,5 @@
 // UNCLASSIFIED
 
-/*
-To do:
-+ Review and revise README.md
-+ Update jsduck comments herein
-*/
-
 /**
 @class JSDB
 @requires cluster
