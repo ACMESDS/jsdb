@@ -885,12 +885,13 @@ function sqlContext(ctx, cb) {
 function getTables(db, cb) {
 	var 
 		key = `Tables_in_${db}`,
-		tables = {};
+		tables = [];
 				  
 	this.query( "SHOW TABLES FROM ??", [db], function (err, recs) {
 		if ( !err ) {
 			recs.forEach( function (rec) {
-				tables[ rec[key] ] = db;
+				//tables[ rec[key] ] = db;
+				tables.push( rec[key] );
 			});
 			cb( tables );
 		}
