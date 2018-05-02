@@ -1,17 +1,10 @@
 // UNCLASSIFIED
 
-/*
-To do:
-+ Review and revise README.md
-+ Update jsduck comments herein
-*/
-
 /**
 @class JSDB
 @requires cluster
 @requires enum
 @requires mysql
-See README.md for general usage. See /todos.view for ways to contribute.
 */
 
 var 											// nodejs
