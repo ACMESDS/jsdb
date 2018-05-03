@@ -56,7 +56,7 @@ var
 			
 			if (opts) Copy(opts,JSDB,".");
 			
-			Log("CONFIG JSDB");
+			//Trace("CONFIG JSDB");
 			
 			if (mysql = JSDB.mysql) {
 				
@@ -127,7 +127,7 @@ var
 									ctx = this._ctx,
 									sql = this,
 									query = ctx.where,
-									emitter = JSDB.io.sockets.emit;									
+									emit = JSDB.emit;									
 
 								switch ((req||0).constructor) {
 									case Function:  // select
@@ -156,7 +156,7 @@ var
 										ctx.crud = "insert";
 										req.forEach( function (rec) {
 											ctx.set = rec;
-											sql.run( ctx, emitter, function (err,info) {
+											sql.run( ctx, emit, function (err,info) {
 												ctx.err = err;
 											});
 										});	
@@ -166,7 +166,7 @@ var
 										ctx.crud = "update";
 										ctx.set = req;
 										if ( query.ID ) 
-											sql.run( ctx, emitter, function (err,info) {
+											sql.run( ctx, emit, function (err,info) {
 												ctx.err = err;
 
 												if (true) {  // update change journal if enabled
@@ -183,7 +183,7 @@ var
 									case Number:  // delete
 										if ( query.ID ) {
 											ctx.crud = "delete";
-											sql.run( ctx, emitter, function (err,info) {
+											sql.run( ctx, emit, function (err,info) {
 												ctx.err = err;
 											});
 										}
@@ -238,12 +238,8 @@ var
 		
 		msql: null,  //< reserved for mysql connector
 		
-		io: {	//< reserved for socketio
-			 sockets: {
-				 emit: null
-			 }
-		},
-		
+		emit: null,  //< reserved for socketio emit
+			
 		thread: sqlThread,
 		forEach: sqlEach,
 		forAll: sqlAll,
@@ -1105,13 +1101,15 @@ function run(ctx, emit, cb) {
 
 				cb( err, info );
 
-				if ( emit && !err && ctx.client ) // Notify other clients of change
-					emit( ctx.query, {
+				if ( emit && !err && ctx.client ) { // Notify other clients of change
+					Log("emitting", ctx);
+					emit( ctx.crud, {
 						path: "/"+ctx.from+".db", 
 						body: ctx.set, 
 						ID: ctx.where.ID, 
 						from: ctx.client
 					});	
+				}
 
 			});
 }
