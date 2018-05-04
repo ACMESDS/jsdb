@@ -1101,7 +1101,7 @@ function run(ctx, emit, cb) {
 
 				cb( err, info );
 
-				if ( emit && !err && ctx.client ) { // Notify other clients of change
+				if ( 0 && emit && !err && ctx.client ) { // Notify other clients of change
 					Log("emitting", ctx);
 					emit( ctx.crud, {
 						path: "/"+ctx.from+".db", 
