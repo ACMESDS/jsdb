@@ -65,6 +65,7 @@ var
 				sqlThread( function (sql) {
 
 					var ex = [  // extend sql connector with useful methods
+						queryify,
 						
 						// key getters
 						getKeys,
@@ -890,25 +891,13 @@ function getTables(db, cb) {
 function build(opts) {
 	var
 		sql = this,
-		pool = JSDB.mysql.pool,
-		escape = pool.escape,
-		escapeId = pool.escapeId,
-		ex = {
-			sql: "",
-			values: []
-		};
+		escape = MYSQL.escape,
+		escapeId = MYSQL.escapeId,
+		ex = ""; 
 	
-	function push( key, op ) {
-		if ( opt = opts[key] ) 
-			if ( add = op( opt ) ) {
-				ex.values.push( opt );
-				ex.sql += add;
-			}
-	}
-	
-	//Log(opts);
 	switch ( opts.crud ) {
 		case "select":
+			/*
 			push( "nlp", (opt) => {
 				opts.as = new SQLOP( "nlp", "Score", opts.search||"", opt );
 				opts.having = [new SQLOP( ">", "Score", opts.score||0 )];
@@ -994,7 +983,6 @@ function build(opts) {
 							else   // have an sql askey$=expression
 								index.push( `${test} AS ${as}` );
 						}
-				
 				return "SELECT SQL_CALC_FOUND_ROWS " 
 						+ (index.length ? index.join(",") : "*")
 						+ (opts.as ? ","+opts.as.toSqlString() : "")
@@ -1047,39 +1035,125 @@ function build(opts) {
 			});				
 			push( "limit", (opt) => " LIMIT ?" );
 			//push( "offset", (opt) => " OFFSET ?" );
+			*/
+			if ( index = sql.queryify(opts.index) )
+				ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
+			else
+				ex += "SELECT SQL_CALC_FOUND_ROWS *" ;
+			
+			if ( pivot = opts.pivot ) {
+				var 
+					where = opts.where || {},
+					nodeID = where.NodeID || "root";
+
+				if (nodeID == "root") {
+					opts.idx = "group_concat(DISTINCT ID) AS NodeID, count(ID) AS NodeCount,false AS leaf,true AS expandable,false AS expanded";
+					opts.group = pivot;
+					delete where.NodeID;
+				}
+
+				else {
+					opts.idx = `'${nodeID}' AS NodeID, 1 AS NodeCount, true AS leaf,true AS expandable,false AS expanded`;
+					opts.index = {"ID==": nodeID};
+					opts.group = null;
+				}
+			}
+				
+			if ( browse = opts.brows ) {
+				var	
+					slash = "_", 
+					where = opts.where || {},
+					nodeID = where.NodeID,
+					nodes = nodeID ? nodeID.split(slash) : [],
+					pivots = browse.split(","),
+					group = opts.group = (nodes.length >= pivots.length)
+						? pivots.concat(["ID"])
+						: pivots.slice(0,nodes.length+1),
+					name = pivots[nodes.length] || "concat('ID',ID)",
+					path = group.join(",'"+slash+"',");
+
+				opts.idx = `cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
+						+ ", count(ID) AS NodeCount "
+						+ ", '/tbd' AS `path`, 1 AS `read`, 1 AS `write`, 'v1' AS `group`, 1 AS `locked`";
+
+				delete where.NodeID;
+				nodes.each( function (n,node) {
+					where[ pivots[n] || "ID" ] = node;
+				});
+			}
+			
+			if ( from = opts.from )
+				ex += sql.format(" FROM ??", from );
+			
+			if ( where = sql.queryify(opts.where) )
+				ex += sql.format(" WHERE least(?,1)", where );
+			
+			if ( having = sql.queryify(opts.having) )
+				ex += sql.format(" HAVING least(?,1)", having );
+			
+			if ( sort = opts.sort ) 
+				try {
+					var by = [];
+					sort.forEach( function (opt) {
+						var key = escapeId(opt.property);
+						by.push(`${key} ${opt.direction}`);
+					});
+					by = by.join(",");
+					if (by) ex += ` ORDER BY ${by}`;
+				}
+				catch (err) {
+				}
+			
+			if ( group = opts.group ) 
+				ex += sql.format(" GROUP BY " + escapeId( group.split(",") ));
+			
+			if ( order = opts.order )
+				ex += sql.format(" ORDER BY " + escapeId( order.split(",") ));
+			
+			if (limit = opts.limit)
+				ex += sql.format(" LIMIT ?", limit);
+
+			if (offset = opts.offset)
+				ex += sql.format(" OFFSET ?", offset);
+			
 			break;
 			
 		case "update":
-			push( "from", (opts) => "UPDATE ??" );
-			push( "set", (opts) => " SET ?" );
-			push( "where", (opt) => {
-				for (var key in opt) 
-					return " WHERE least(?,1)";
-			});
+			if ( from = opts.from )
+				ex += sql.format("UPDATE ??" , from);
+			
+			if ( set = opts.set )
+				ex += sql.format(" SET ?" , set);
+			
 			break;
 			
 		case "delete":
-			push( "from", (opts) => "DELETE FROM ??" );
-			push( "where", (opt) => {
-				for (var key in opt) 
-					return " WHERE least(?,1)";
-			});
+			if ( from = opts.from )
+				ex += sql.format("DELETE FROM ??" , from);
+			
+			if ( where = sql.queryify(opts.where) )
+				ex += sql.format(" WHERE least(?,1)", where);
+			
 			break;
 			
 		case "insert":
-			push( "from", (opts) => "INSERT INTO ??" );
-			push( "set", (opts) => " SET ?" );
+			if ( from = opts.from )
+				ex += sql.format("INSERT INTO ??" , from);
+			
+			if ( set = sql.queryify(opts.set) ) 
+				ex += sql.format(" SET ?", set);
+			else
+				ex += sql.format(" () values ()", []);
+			
 			break;
 	}
 	
-	Log(this.format(ex.sql, ex.values) );
+	Log( ex );
 	return ex;
 }
 
 function run(ctx, emit, cb) {
-	var ex = this.build(ctx);
-	
-	if (ex.sql) 
+	if ( ex = this.build(ctx) ) 
 		if ( ctx.lock ) {
 			sql.ctx = ctx;
 			sql.relock( function () {  // sucessfully unlocked
@@ -1096,8 +1170,8 @@ function run(ctx, emit, cb) {
 			});
 		}
 
-		else			
-			this.query( ex.sql, ex.values, function (err, info) {
+		else
+			this.query( ex, [], function (err, info) {
 
 				cb( err, info );
 
@@ -1178,6 +1252,7 @@ function relock(unlockcb, lockcb) {  			// lock-unlock record
 		ctx.err = JSDB.errors.noLock;
 }
 
+/*
 function SQLOP( op , key, val, search ) {
 	var mysql = JSDB.mysql.pool;
 	this.op = op;
@@ -1226,6 +1301,100 @@ SQLOP.prototype.toSqlString = function () {
 		default:
 			return "";
 	}
+}
+*/
+
+function queryify(query) {
+	for (var key in query) 
+		return new QUERY(query);
+	
+	return null;
+}
+
+function QUERY(query) {
+	for (var key in query) this[key] = query[key];
+}
+
+QUERY.prototype.toSqlString = function () {
+	
+	function build(key, val, cb) {
+		var 
+			id = escapeId( key.substr(0,key.length-2) ), 
+			op = key.substr(-2);
+		
+		switch ( op  ) {
+			case "/:":
+				return `MATCH(${this.search}) AGAINST(${val}) AS ${id}`;
+			case "^:":
+				return `MATCH(${this.search}) AGAINST(${val} IN BINARY MODE) AS ${id}`;
+			case "|:":
+				return `MATCH(${this.search}) AGAINST(${val} IN QUERY EXPANSION) AS ${id}`;
+				
+			case "<$":
+			case ">$":
+				return id + op.substr(0,1) + val;
+			
+			default:
+				id = escapeId( key.substr(0,key.length-1) );
+				switch ( op = key.substr(-1)+"=" ) {
+					case "/=":
+						return `MATCH(${id}) AGAINST(${val})` ;
+					case "^=":
+						return `MATCH(${id}) AGAINST(${val} IN BINARY MODE)` ;
+					case "|=":
+						return `MATCH(${id}) AGAINST(${val} WITH QUERY EXPANSION)` ;
+
+					case "*=":
+						var vals = val.split(",");
+						return `${id} BETWEEN ${vals[0]} AND ${vals[1]}`;
+
+					case "%=":
+						return `${id} LIKE ${val}`;
+
+					case "<=":
+					case ">=":
+					case "!=":
+						return id + op + val;
+
+					case "==":
+						return `instr( ',${val},' , concat(',' , ${id} , ','))`;
+
+					case ":=":
+						var 
+							jsons = (val+"").split("$"),
+							exprs = [];
+
+						//Log(id,jsons,val);
+						if ( jsons.length>1) {   // have a json extract id:=json expression
+							jsons.forEach( function (expr,n) {
+								if ( n ) exprs.push( mysql.escape( "$"+expr ) );
+							});
+
+							exprs = exprs.join(",");
+							return `json_extract( ${jsons[0]}, ${exprs} ) AS ${id}` ;
+						}
+
+						else   // have an sql askey:=sql expression
+							return `${val} AS ${id}` ;
+
+					default:
+						id = escapeId( key );
+						return `${id}=${val}` ;
+				}
+		}
+	
+	}
+	
+	var 
+		escape = MYSQL.escape,
+		escapeId = MYSQL.escapeId,
+		rtn = [];
+
+	Each(this, function (key, val) {
+		rtn.push( build( key, escape(val) ) );
+	});
+	
+	return rtn.join(", ");
 }
 
 function Trace(msg,sql) {
