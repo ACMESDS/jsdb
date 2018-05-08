@@ -65,7 +65,7 @@ var
 				sqlThread( function (sql) {
 
 					var ex = [  // extend sql connector with useful methods
-						queryify,
+						toQuery,
 						
 						// key getters
 						getKeys,
@@ -305,30 +305,30 @@ function onError(cb) {  // on-error callback cb(err) and release connection
 	return this;
 }
 
-function forFirst(trace, query, args, cb) {  // callback cb(rec) or cb(null) if error
+function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
 	this.q = this.query( query || "#ignore", args, function (err,recs) {  // smartTokens(query,args)
 		cb( err ? null : recs[0] );
 	});
 	
-	if (trace) Trace( trace + " " + this.q.sql);	
+	if (msg) Trace( msg + " " + this.q.sql);	
 	return this;
 }
 
-function forEach(trace, query, args, cb) { // callback cb(rec) with each rec
+function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
 	
 	// smartTokens(query,args)
 	this.q = this.query( query || "#ignore", args).on("result", cb);
 	
-	if (trace) Trace( trace + " " + this.q.sql);	
+	if (msg) Trace( msg + " " + this.q.sql);	
 	return this;
 }
 
-function forAll(trace, query, args, cb) { // callback cb(recs) if no error
+function forAll(msg, query, args, cb) { // callback cb(recs) if no error
 	this.q = this.query( query || "#ignore", args, function (err,recs) {
 		if (!err) if(cb) cb( recs );
 	})
 	
-	if (trace) Trace( trace + " " + this.q.sql);	
+	if (msg) Trace( msg + " " + this.q.sql);	
 	return this;
 }
 
@@ -719,7 +719,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 					? [table, limits.score, limits.records]
 					: [table, limits.records];
 
-			Trace( sql.query( query, args,  function (err,recs) {
+			sql.query( query, args,  function (err,recs) {
 				
 				if (err) {
 					rtns.push( {
@@ -752,7 +752,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 
 						flatten( sql, rtns, depth+1, order, catalog, limits, cb );
 					});
-			}) );	
+			});	
 		}
 		else
 			cb.res(rtns);
@@ -897,168 +897,39 @@ function build(opts) {
 	
 	switch ( opts.crud ) {
 		case "select":
-			/*
-			push( "nlp", (opt) => {
-				opts.as = new SQLOP( "nlp", "Score", opts.search||"", opt );
-				opts.having = [new SQLOP( ">", "Score", opts.score||0 )];
-			});
-			push( "bin", (opt) => {
-				opts.as = new SQLOP( "bin", "Score", opts.search||"", opt );
-				opts.having = [new SQLOP( ">", "Score", opts.score||0 )];
-			});
-			push( "qex", (opt) => {
-				opts.as = new SQLOP( "qex", "Score", opts.search||"", opt );
-				opts.having = [new SQLOP( ">", "Score", opts.score||0 )];
-			});	
-			push( "pivot", (opt) => {
-				var 
-					where = opts.where,
-					nodeID = where.NodeID || "root";
-
-				if (nodeID == "root") {
-					opts.idx = "group_concat(DISTINCT ID) AS NodeID, count(ID) AS NodeCount,false AS leaf,true AS expandable,false AS expanded";
-					opts.group = opt;
-					delete where.NodeID;
-				}
-
-				else {
-					opts.idx = `'${nodeID}' AS NodeID, 1 AS NodeCount, true AS leaf,true AS expandable,false AS expanded`;
-					opts.tests = [new SQLOP("node", ID, nodeID)];
-						// `instr(',${nodeID},' , concat(',' , ID , ','))`;
-					opts.group = null;
-				}
-			});
-			push( "browse", (opt) => {
-				var	
-					slash = "_", 
-					where = opts.where,
-					nodeID = where.NodeID,
-					nodes = nodeID ? nodeID.split(slash) : [],
-					pivots = opt.split(",");
-
-				opts.group = (nodes.length >= pivots.length)
-					? pivots.concat(["ID"])
-					: pivots.slice(0,nodes.length+1);
-
-				var name = pivots[nodes.length] || "concat('ID',ID)";
-				var path = me.group.Escape(",'"+slash+"',");
-
-				opts.idx = `cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
-						+ ", count(ID) AS NodeCount "
-						+ ", '/tbd' AS `path`, 1 AS `read`, 1 AS `write`, 'v1' AS `group`, 1 AS `locked`";
-
-				delete where.NodeID;
-				nodes.each( function (n,node) {
-					where[ pivots[n] || "ID" ] = node;
-				});
-			});
-			push( "from", (opt) => {
-				var 
-					tests = opts.tests,
-					index = opts.index ? opts.index.split(",") : [];
-				
-				index.forEach( function (key, n) { // indecies on index=key,... are safely escaped
-					index[n] = sql.escapeId(key); 
-				});
-				
-				for (var key in tests) // convert askey$=expr indicies
-					if ( test = tests[key] )
-						if ( key.endsWith("$=") ) {  // have an askey$=expr index
-							delete tests[key];
-							var 
-								as = sql.escapeId( key.substr(0, key.length-2) ),
-								jsons = test.split("$"),
-								exprs = [];
-							
-							//Log(as,jsons,exprs);
-							if ( jsons.length>1) {   // have a json extract key$=expression
-								jsons.forEach( function (expr,n) {
-									if ( n ) exprs.push( sql.escape( "$"+expr ) );
-								});
-
-								exprs = exprs.join(",");
-								index.push( `json_extract( ${jsons[0]}, ${exprs} ) AS ${as}` );
-							}
-							
-							else   // have an sql askey$=expression
-								index.push( `${test} AS ${as}` );
-						}
-				return "SELECT SQL_CALC_FOUND_ROWS " 
-						+ (index.length ? index.join(",") : "*")
-						+ (opts.as ? ","+opts.as.toSqlString() : "")
-						+ (opts.idx ? ","+opts.idx : "")
-						+ " FROM ??" ;
-			});
-			push( "join", (opt) => { 
-				var rtn = "";
-				Each( opts, function (src, on) {
-					rtn += `LEFT JOIN ${src} + " ON ${on}` ;
-				});
-				return rtn;
-			});
-			push( "where", (opt) => {
-				for (var key in opt) 
-					return " WHERE least(?,1)";
-			});
-			push( "tests", (opt) => {
-				var tests = [];
-				for (var key in opt) 
-					tests.push( new SQLOP( key.substr(-2), key.substr(0,key.length-2), opt[key] ) );
-					
-				if ( tests.length ) {
-					ex.values.push( tests );
-					if ( ex.sql.indexOf("WHERE") >= 0 ) ex.sql += " AND";
-					ex.sql += " WHERE least(?,1)";
-				}
-			});
-			push( "having", (opt) => " HAVING least(?,1)" );
-			push( "sort", (opt) => {
-				try {
-					var by = [];
-					opt.forEach( function (opt) {
-						var key = escapeId(opt.property);
-						by.push(`${key} ${opt.direction}`);
-					});
-					by = by.join(",");
-					if (by) ex.sql += ` ORDER BY ${by}`;
-				}
-				catch (err) {
-				}
-			});
-			push( "order", (opt) => {
-				ex.values.push( opt.split(",") );
-				ex.sql += " ORDER BY ??";
-			});
-			push( "group", (opt) => {
-				ex.values.push( opt.split(",") );
-				ex.sql += " GROUP BY ??";
-			});				
-			push( "limit", (opt) => " LIMIT ?" );
-			//push( "offset", (opt) => " OFFSET ?" );
-			*/
-			if ( index = sql.queryify(opts.index) )
-				ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
-			else
-				ex += "SELECT SQL_CALC_FOUND_ROWS *" ;
-			
 			if ( pivot = opts.pivot ) {
 				var 
 					where = opts.where || {},
-					nodeID = where.NodeID || "root";
+					slash = "_",
+					nodeID = where.NodeID || "root",
+					index = opts.index = (nodeID == "root") 
+						? {
+							"NodeID:": `group_concat(DISTINCT ID SEPARATOR '${slash}')`,
+							"NodeCount:": "count(ID)",
+							"leaf:": "false",
+							"expandable:": "true",
+							"expanded:": "false"
+						}
+						: {
+							"NodeID:": `'${nodeID}`,
+							"NodeCount:": "true",
+							"leaf:": "true",
+							"expandable:": "true",
+							"expanded:": "false",
+							"ID=": nodeID
+						};
 
 				if (nodeID == "root") {
-					opts.idx = "group_concat(DISTINCT ID) AS NodeID, count(ID) AS NodeCount,false AS leaf,true AS expandable,false AS expanded";
 					opts.group = pivot;
 					delete where.NodeID;
 				}
 
-				else {
-					opts.idx = `'${nodeID}' AS NodeID, 1 AS NodeCount, true AS leaf,true AS expandable,false AS expanded`;
-					opts.index = {"ID==": nodeID};
+				else 
 					opts.group = null;
-				}
+
+				Log(index);
 			}
-				
+			else
 			if ( browse = opts.brows ) {
 				var	
 					slash = "_", 
@@ -1070,25 +941,37 @@ function build(opts) {
 						? pivots.concat(["ID"])
 						: pivots.slice(0,nodes.length+1),
 					name = pivots[nodes.length] || "concat('ID',ID)",
-					path = group.join(",'"+slash+"',");
+					path = group.join(",'"+slash+"',"),
+					index = opts.index = {
+						"NodeID:": `group_concat(DISTINCT ${path})`,
+						"NodeCount:": "count(ID)",
+						"path:": '/tbd',
+						"read:": "1",
+						"write:": "1",
+						"group:": "v1",
+						"locked:": "1"
+					};
 
-				opts.idx = `cast(${name} AS char) AS name, group_concat(DISTINCT ${path}) AS NodeID`
-						+ ", count(ID) AS NodeCount "
-						+ ", '/tbd' AS `path`, 1 AS `read`, 1 AS `write`, 'v1' AS `group`, 1 AS `locked`";
+				index[name+":"] = `cast(${name} AS char)`;
 
 				delete where.NodeID;
-				nodes.each( function (n,node) {
+				nodes.forEach( function (node) {
 					where[ pivots[n] || "ID" ] = node;
 				});
 			}
+						
+			if ( index = sql.toQuery(opts.index) )
+				ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
+			else
+				ex += "SELECT SQL_CALC_FOUND_ROWS *" ;
 			
 			if ( from = opts.from )
 				ex += sql.format(" FROM ??", from );
 			
-			if ( where = sql.queryify(opts.where) )
+			if ( where = sql.toQuery(opts.where) )
 				ex += sql.format(" WHERE least(?,1)", where );
 			
-			if ( having = sql.queryify(opts.having) )
+			if ( having = sql.toQuery(opts.having) )
 				ex += sql.format(" HAVING least(?,1)", having );
 			
 			if ( sort = opts.sort ) 
@@ -1131,7 +1014,7 @@ function build(opts) {
 			if ( from = opts.from )
 				ex += sql.format("DELETE FROM ??" , from);
 			
-			if ( where = sql.queryify(opts.where) )
+			if ( where = sql.toQuery(opts.where) )
 				ex += sql.format(" WHERE least(?,1)", where);
 			
 			break;
@@ -1140,7 +1023,7 @@ function build(opts) {
 			if ( from = opts.from )
 				ex += sql.format("INSERT INTO ??" , from);
 			
-			if ( set = sql.queryify(opts.set) ) 
+			if ( set = sql.toQuery(opts.set) ) 
 				ex += sql.format(" SET ?", set);
 			else
 				ex += sql.format(" () values ()", []);
@@ -1304,7 +1187,7 @@ SQLOP.prototype.toSqlString = function () {
 }
 */
 
-function queryify(query) {
+function toQuery(query) {
 	for (var key in query) 
 		return new QUERY(query);
 	
@@ -1319,55 +1202,55 @@ QUERY.prototype.toSqlString = function () {
 	
 	function build(key, val, cb) {
 		var 
+			esc = escape(val),
 			id = escapeId( key.substr(0,key.length-2) ), 
 			op = key.substr(-2);
 		
 		switch ( op  ) {
 			case "/:":
-				return `MATCH(${this.search}) AGAINST(${val}) AS ${id}`;
+				return `MATCH(Search) AGAINST(${esc}) AS ${id}`;
 			case "^:":
-				return `MATCH(${this.search}) AGAINST(${val} IN BINARY MODE) AS ${id}`;
+				return `MATCH(Search) AGAINST(${esc} IN BINARY MODE) AS ${id}`;
 			case "|:":
-				return `MATCH(${this.search}) AGAINST(${val} IN QUERY EXPANSION) AS ${id}`;
+				return `MATCH(Search) AGAINST(${esc} IN QUERY EXPANSION) AS ${id}`;
 				
 			case "<$":
 			case ">$":
-				return id + op.substr(0,1) + val;
+				return id + op.substr(0,1) + esc;
 			
 			default:
 				id = escapeId( key.substr(0,key.length-1) );
 				switch ( op = key.substr(-1)+"=" ) {
 					case "/=":
-						return `MATCH(${id}) AGAINST(${val})` ;
+						return `MATCH(${id}) AGAINST(${esc})` ;
 					case "^=":
-						return `MATCH(${id}) AGAINST(${val} IN BINARY MODE)` ;
+						return `MATCH(${id}) AGAINST(${esc} IN BINARY MODE)` ;
 					case "|=":
-						return `MATCH(${id}) AGAINST(${val} WITH QUERY EXPANSION)` ;
+						return `MATCH(${id}) AGAINST(${esc} WITH QUERY EXPANSION)` ;
 
 					case "*=":
-						var vals = val.split(",");
+						var vals = esc.split(",");
 						return `${id} BETWEEN ${vals[0]} AND ${vals[1]}`;
 
 					case "%=":
-						return `${id} LIKE ${val}`;
+						return `${id} LIKE ${esc}`;
 
 					case "<=":
 					case ">=":
 					case "!=":
-						return id + op + val;
+						return id + op + esc;
 
 					case "==":
-						return `instr( ',${val},' , concat(',' , ${id} , ','))`;
+						return `instr( '_${val}_' , concat('_' , ${id} , '_'))`;
 
 					case ":=":
 						var 
 							jsons = (val+"").split("$"),
 							exprs = [];
 
-						//Log(id,jsons,val);
 						if ( jsons.length>1) {   // have a json extract id:=json expression
 							jsons.forEach( function (expr,n) {
-								if ( n ) exprs.push( mysql.escape( "$"+expr ) );
+								if ( n ) exprs.push( escape( "$"+expr ) );
 							});
 
 							exprs = exprs.join(",");
@@ -1379,10 +1262,10 @@ QUERY.prototype.toSqlString = function () {
 
 					default:
 						id = escapeId( key );
-						return `${id}=${val}` ;
+						return `${id}=${esc}` ;
 				}
 		}
-	
+		
 	}
 	
 	var 
@@ -1391,7 +1274,8 @@ QUERY.prototype.toSqlString = function () {
 		rtn = [];
 
 	Each(this, function (key, val) {
-		rtn.push( build( key, escape(val) ) );
+		if (val) 
+			rtn.push( build( key, val ) );
 	});
 	
 	return rtn.join(", ");
