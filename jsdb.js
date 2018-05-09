@@ -916,7 +916,7 @@ function build(opts) {
 							"leaf:": "true",
 							"expandable:": "true",
 							"expanded:": "false",
-							"ID=": nodeID
+							"ID:$": nodeID
 						};
 
 				if (nodeID == "root") {
@@ -1008,6 +1008,12 @@ function build(opts) {
 			if ( set = opts.set )
 				ex += sql.format(" SET ?" , set);
 			
+			if ( where = sql.toQuery(opts.where) )
+				ex += sql.format(" WHERE least(?,1)", where);
+			
+			else
+				ex = "#UPDATE NO WHERE";
+			
 			break;
 			
 		case "delete":
@@ -1017,6 +1023,9 @@ function build(opts) {
 			if ( where = sql.toQuery(opts.where) )
 				ex += sql.format(" WHERE least(?,1)", where);
 			
+			else
+				ex = "#DELETE NO WHERE";
+			
 			break;
 			
 		case "insert":
@@ -1025,6 +1034,7 @@ function build(opts) {
 			
 			if ( set = sql.toQuery(opts.set) ) 
 				ex += sql.format(" SET ?", set);
+			
 			else
 				ex += sql.format(" () values ()", []);
 			
@@ -1135,58 +1145,6 @@ function relock(unlockcb, lockcb) {  			// lock-unlock record
 		ctx.err = JSDB.errors.noLock;
 }
 
-/*
-function SQLOP( op , key, val, search ) {
-	var mysql = JSDB.mysql.pool;
-	this.op = op;
-	this.search = search;
-	this.key = mysql.escapeId(key);
-	try {
-		this.val = mysql.escape( JSON.parse(val) );
-	}
-	catch (err) {
-		this.val = '"' + val + '"'; //mysql.escape(val);
-	}
-	//Log(this.op, this.key, this.val);
-}
-
-SQLOP.prototype.toSqlString = function () {
-	//Log(this.key, this.op, this.val);
-	switch ( this .op ) {
-		case "node":
-			return `instr( ',${this.val},' , concat(',' , ${this.key} , ','))`;
-		case "nlp":
-			return `MATCH(${this.search}) AGAINST(${this.val}) AS ${this.key}`;
-		case "bin":
-			return `MATCH(${this.search}) AGAINST(${this.val} IN BINARY MODE) AS ${this.key}`;
-		case "qex":
-			return `MATCH(${this.search}) AGAINST(${this.val} IN QUERY EXPANSION) AS ${this.key}`;
-		case "/=":
-			return `MATCH(${this.key}) AGAINST(${this.val})`;
-		case "^=":
-			return `MATCH(${this.key}) AGAINST(${this.val} IN BINARY MODE)` ;
-		case "|=":
-			return `MATCH(${this.key}) AGAINST(${this.val} WITH QUERY EXPANSION)` ;
-		case "%=":
-			return `${this.key} LIKE ${this.val}` ;
-		//case "/=":
-		//	return `INSTR(${this.key}, ${this.val}` ;
-		case "*=":
-			var vals = this.val.split(",");
-			return `${this.key} BETWEEN ${vals[0]} AND ${vals[1]}` ;
-		case "<:":
-		case ">:":
-			return `${this.key}${this.op.substr(0,1)}${this.val}` ;
-		case "<=":
-		case ">=":
-		case "!=":
-			return `${this.key}${this.op}${this.val}` ;
-		default:
-			return "";
-	}
-}
-*/
-
 function toQuery(query) {
 	for (var key in query) 
 		return new QUERY(query);
@@ -1203,67 +1161,71 @@ QUERY.prototype.toSqlString = function () {
 	function build(key, val, cb) {
 		var 
 			esc = escape(val),
-			id = escapeId( key.substr(0,key.length-2) ), 
-			op = key.substr(-2);
+			op = key.substr(-1),
+			id = escapeId( key.substr(0,key.length-op.length) );
 		
-		switch ( op  ) {
-			case "/:":
-				return `MATCH(Search) AGAINST(${esc}) AS ${id}`;
-			case "^:":
-				return `MATCH(Search) AGAINST(${esc} IN BINARY MODE) AS ${id}`;
-			case "|:":
-				return `MATCH(Search) AGAINST(${esc} IN QUERY EXPANSION) AS ${id}`;
+		switch ( op ) {
+			case "*":
+				var vals = esc.split(",");
+				return `${id} BETWEEN ${vals[0]} AND ${vals[1]}`;
+
+			case "%":
+				return `${id} LIKE ${esc}`;
+
+			case "<":
+			case ">":
+			case "!":
+				return id + op + "=" + esc;
+
+			case "$":
+					
+				op = key.substr(-2);
+				id = escapeId( key.substr(0,key.length-op.length) );
 				
-			case "<$":
-			case ">$":
-				return id + op.substr(0,1) + esc;
-			
-			default:
-				id = escapeId( key.substr(0,key.length-1) );
-				switch ( op = key.substr(-1)+"=" ) {
-					case "/=":
-						return `MATCH(${id}) AGAINST(${esc})` ;
-					case "^=":
-						return `MATCH(${id}) AGAINST(${esc} IN BINARY MODE)` ;
-					case "|=":
-						return `MATCH(${id}) AGAINST(${esc} WITH QUERY EXPANSION)` ;
-
-					case "*=":
-						var vals = esc.split(",");
-						return `${id} BETWEEN ${vals[0]} AND ${vals[1]}`;
-
-					case "%=":
-						return `${id} LIKE ${esc}`;
-
-					case "<=":
-					case ">=":
-					case "!=":
-						return id + op + esc;
-
-					case "==":
+				switch ( op ) {
+					case "/$":
+						return `MATCH(Search) AGAINST(${esc}) AS ${id}`;
+					case "^$":
+						return `MATCH(Search) AGAINST(${esc} IN BINARY MODE) AS ${id}`;
+					case "|$":
+						return `MATCH(Search) AGAINST(${esc} IN QUERY EXPANSION) AS ${id}`;
+					case "<$":
+					case ">$":
+						return id + op.substr(0,1) + esc;
+					case ":$":
 						return `instr( '_${val}_' , concat('_' , ${id} , '_'))`;
-
-					case ":=":
-						var 
-							jsons = (val+"").split("$"),
-							exprs = [];
-
-						if ( jsons.length>1) {   // have a json extract id:=json expression
-							jsons.forEach( function (expr,n) {
-								if ( n ) exprs.push( escape( "$"+expr ) );
-							});
-
-							exprs = exprs.join(",");
-							return `json_extract( ${jsons[0]}, ${exprs} ) AS ${id}` ;
-						}
-
-						else   // have an sql askey:=sql expression
-							return `${val} AS ${id}` ;
-
 					default:
-						id = escapeId( key );
-						return `${id}=${esc}` ;
+						return "";
 				}
+				
+			case "/":
+				return `MATCH(${id}) AGAINST(${esc})` ;
+			case "^":
+				return `MATCH(${id}) AGAINST(${esc} IN BINARY MODE)` ;
+			case "|":
+				return `MATCH(${id}) AGAINST(${esc} WITH QUERY EXPANSION)` ;
+				
+			case ":":
+
+				var 
+					jsons = (val+"").split("$"),
+					exprs = [];
+
+				if ( jsons.length>1) {   // have a json extract id:=json expression
+					jsons.forEach( function (expr,n) {
+						if ( n ) exprs.push( escape( "$"+expr ) );
+					});
+
+					exprs = exprs.join(",");
+					return `json_extract( ${jsons[0]}, ${exprs} ) AS ${id}` ;
+				}
+
+				else   // have an sql askey:=sql expression
+					return `${val} AS ${id}` ;
+
+			default:
+				id = escapeId( key );
+				return `${id}=${esc}` ;
 		}
 		
 	}
