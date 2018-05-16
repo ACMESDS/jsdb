@@ -258,11 +258,17 @@ function getKeys(table, type, keys, cb) {
 }
 
 function getFields(table, where, keys, cb) {
-	this.query(`SHOW FULL FIELDS FROM ${table} WHERE least(?,1)`,where, function (err, recs) {
-		recs.each( function (n, rec) {
-			keys.push(rec.Field);
-		});
-		cb(keys);
+	this.query( 
+		where 
+			? `SHOW FULL FIELDS FROM ${table} WHERE least(?,1)`
+			: `SHOW FULL FIELDS FROM ${table} `, 
+		
+		where, function (err, recs) {
+			
+			recs.each( function (n, rec) {
+				keys.push(rec.Field);
+			});
+			if (cb) cb(keys);
 	});
 }
 
