@@ -7,10 +7,14 @@
 @requires mysql
 */
 
-var 											// nodejs
-	CLUSTER = require("cluster");
+var 
+	// globals
+	TRACE = "B>",
+	
+	// nodejs modules
+	CLUSTER = require("cluster"),
 
-var												// 3rd party bindings
+	// 3rd party bindings
 	MYSQL = require("mysql");
 
 const { Copy,Each,Log } = require("enum");
@@ -316,7 +320,7 @@ function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if er
 		cb( err ? null : recs[0] );
 	});
 	
-	if (msg) Trace( msg + " " + this.q.sql);	
+	if (msg) msg.trace(this.q.sql);	
 	return this;
 }
 
@@ -325,7 +329,7 @@ function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
 	// smartTokens(query,args)
 	this.q = this.query( query || "#ignore", args).on("result", cb);
 	
-	if (msg) Trace( msg + " " + this.q.sql);	
+	if (msg) msg.trace(this.q.sql);	
 	return this;
 }
 
@@ -334,7 +338,7 @@ function forAll(msg, query, args, cb) { // callback cb(recs) if no error
 		if (!err) if(cb) cb( recs );
 	})
 	
-	if (msg) Trace( msg + " " + this.q.sql);	
+	if (msg) msg.trace(this.q.sql);	
 	return this;
 }
 
@@ -1250,5 +1254,5 @@ QUERY.prototype.toSqlString = function () {
 }
 
 function Trace(msg,sql) {
-	msg.trace("B>",sql);
+	TRACE.trace(msg,sql);
 }
