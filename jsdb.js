@@ -818,10 +818,7 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		};
 	}
 
-	var 
-		mysql = JSDB.mysql;
-
-	if (mysql)
+	if (mysql = JSDB.mysql) 
 		if ( mysql.pool) 
 			mysql.pool.getConnection( function (err,sql) {
 				if (err) 
@@ -842,7 +839,7 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 
 		else
 			Log(JSDB.errors.noConnect);
-
+	
 	else 
 		Log(JSDB.errors.noConnect);
 }
