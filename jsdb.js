@@ -267,11 +267,14 @@ function getFields(table, where, keys, cb) {
 			? `SHOW FULL FIELDS FROM ${table} WHERE least(?,1)`
 			: `SHOW FULL FIELDS FROM ${table} `, 
 		
-		where, function (err, recs) {
+		where, (err, recs) => {
 			
-			recs.each( function (n, rec) {
-				keys.push(rec.Field);
-			});
+			//Log(table, err);
+			if (!err)
+				recs.forEach( (rec,n) => {
+					keys.push(rec.Field);
+				});
+			
 			if (cb) cb(keys);
 	});
 }
