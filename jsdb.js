@@ -22,6 +22,9 @@ const { Copy,Each,Log } = require("enum");
 var
 	JSDB = module.exports = {
 		
+		reroute: {  //< default table -> db.table translators
+		},
+				
 		errors: {		//< errors messages
 			noConnect: new Error("sql pool exhausted or undefined"),
 			nillUpdate: new Error("nill update query"),
@@ -38,7 +41,7 @@ var
 			noRecord: new Error("no record found")
 		},
 
-		fetcher: () => Trace("data fetcher not configured"), //< data fetcher
+		fetcher: null, //() => Trace("data fetcher not configured"), //< data fetcher
 		
 		attrs: {		//< reserved for dataset attributes derived during config
 			default:	{ 					// default dataset attributes
@@ -75,10 +78,10 @@ var
 						getKeys,
 						getFields,
 						getTables,
-						jsonKeys,
-						searchKeys,
-						geometryKeys,
-						textKeys,
+						getJsonKeys,
+						getSearchKeys,
+						getGeometryKeys,
+						getTextKeys,
 						
 						// record enumerators
 						build,
@@ -92,6 +95,8 @@ var
 						onError,
 						
 						// misc
+						access,
+						serialize,
 						context,
 						cache,
 						hawk,
@@ -219,7 +224,7 @@ var
 
 					sql.query(`SHOW TABLES FROM ${dsFrom}`, function (err, recs) {
 						recs.each( function (n,rec) {
-							sql.searchKeys( ds = dsFrom + "." + rec[dsKey], [], function (keys) {
+							sql.getSearchKeys( ds = dsFrom + "." + rec[dsKey], [], function (keys) {
 								var attr = attrs[ds] = {};
 								for (var key in attrs.default) attr[key] = attrs.default[key];
 								attr.search = keys.join(",");
@@ -252,6 +257,8 @@ var
 		context: sqlContext
 	};
 
+//============ key access
+
 function getKeys(table, type, keys, cb) {
 	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, function (err, recs) {
 		recs.each( function (n,rec) {
@@ -279,70 +286,36 @@ function getFields(table, where, keys, cb) {
 	});
 }
 
-function jsonKeys(table, keys, cb) {
+function getJsonKeys(table, keys, cb) {
 	this.getFields(table, {Type:"json"}, keys, cb);
 }
 
-function textKeys(table, keys, cb) {
+function getTextKeys(table, keys, cb) {
 	this.getFields(table, {Type:"mediumtext"}, keys, cb);
 }
 
-function searchKeys(table, keys, cb) {
+function getSearchKeys(table, keys, cb) {
 	this.getKeys(table, "fulltext", keys, cb);
 }
 
-function geometryKeys(table, keys, cb) {
+function getGeometryKeys(table, keys, cb) {
 	this.getFields(table, {Type:"geometry"}, keys, cb);
 }
 
-function thenDo(cb) {
-	var sql = this;
-	this.q.on("end", function () {
-		if (cb) cb(sql);
+function getTables(db, cb) {
+	var 
+		key = `Tables_in_${db}`,
+		tables = [];
+				  
+	this.query( "SHOW TABLES FROM ??", [db], function (err, recs) {
+		if ( !err ) {
+			recs.forEach( function (rec) {
+				//tables[ rec[key] ] = db;
+				tables.push( rec[key] );
+			});
+			cb( tables );
+		}
 	});
-	return this;
-}
-
-function onEnd(cb) {  // on-end callback cb() and release connection
-	var sql = this;
-	this.q.on("end", function () {
-		if (cb) cb(sql);
-		sql.release();
-	});
-	return this;
-}
-
-function onError(cb) {  // on-error callback cb(err) and release connection
-	var sql = this;
-	this.q.on("error", cb);
-	return this;
-}
-
-function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
-	this.q = this.query( query || "#ignore", args, function (err,recs) {  // smartTokens(query,args)
-		cb( err ? null : recs[0] );
-	});
-	
-	if (msg) msg.trace(this.q.sql);	
-	return this;
-}
-
-function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
-	
-	// smartTokens(query,args)
-	this.q = this.query( query || "#ignore", args).on("result", cb);
-	
-	if (msg) msg.trace(this.q.sql);	
-	return this;
-}
-
-function forAll(msg, query, args, cb) { // callback cb(recs) if no error
-	this.q = this.query( query || "#ignore", args, function (err,recs) {
-		if (!err) if(cb) cb( recs );
-	})
-	
-	if (msg) msg.trace(this.q.sql);	
-	return this;
 }
 
 function context(ctx,cb) {  // callback cb(dsctx) with a JSDB context
@@ -356,15 +329,19 @@ function context(ctx,cb) {  // callback cb(dsctx) with a JSDB context
 	cb(dsctx);
 }
 
+//============== Record cacheing and bulk record inserts
+ 
+function cache( opts, cb ) {
 /*
 Implements generic cache.  Looks for cache given opts.key and, if found, returns cached results on cb(results);
 otherwse, if not found, returns results via opts.make(fetcher, opts.parms, cb).  If cacheing fails, then opts.default 
 is returned.  The returned results will always contain a results.ID for its cached ID.  If a opts.default is not provided,
 then the cb callback in not made.
 */
-
-function cache( opts, cb ) {
-	var sql = this;
+	var 
+		sql = this,
+		fetcher = JSDB.fetcher,
+		defRec = {ID:0};
 	
 	if ( opts.key )
 		sql.forFirst( 
@@ -378,12 +355,13 @@ function cache( opts, cb ) {
 				}
 				catch (err) {
 					if ( opts.default )
-						cb( Copy(opts.default, {ID: 0} ) );
+						cb( Copy(opts.default, defRec ) );
 				}
 
 			else
 			if ( opts.make && opts.parms ) 
-				opts.make( JSDB.fetcher, opts.parms, function (res) {
+				if (fetcher)
+					opts.make( fetcher, opts.parms, function (res) {
 
 					if (res) 
 						sql.query( 
@@ -397,19 +375,20 @@ function cache( opts, cb ) {
 					if ( opts.default )
 						cb( Copy(opts.default, {ID: 0}) );
 				});
+				
+				else
+					cb( defRec );
 
 			else
 			if ( opts.default )
-				cb( Copy(opts.default, {ID: 0}) );
+				cb( Copy(opts.default, defRec) );
 		});
 	
 	else
 	if ( opts.default )
-		cb( Copy(opts.default, {ID: 0}) );
+		cb( Copy(opts.default, defRec) );
 	
 }
-
-//============== Build insert records
 
 function beginBulk() {
 	this.query("START TRANSACTION");
@@ -707,10 +686,14 @@ function executeJob(req, exe) {
 	});
 }
 
+//=================
+
 function flattenCatalog(flags, catalog, limits, cb) {
 /**
  @method flattenCatalog
  Flatten entire database for searching the catalog
+ 
+ Need to rework using serialize
  * */
 	
 	function flatten( sql, rtns, depth, order, catalog, limits, cb) {
@@ -786,6 +769,58 @@ function flattenCatalog(flags, catalog, limits, cb) {
 		filter: function (search) {
 			return ""; //Builds( "", search, flags);  //reserved for nlp, etc filters
 	} });
+}
+
+//================= record enumerators
+
+function thenDo(cb) {
+	var sql = this;
+	this.q.on("end", function () {
+		if (cb) cb(sql);
+	});
+	return this;
+}
+
+function onEnd(cb) {  // on-end callback cb() and release connection
+	var sql = this;
+	this.q.on("end", function () {
+		if (cb) cb(sql);
+		sql.release();
+	});
+	return this;
+}
+
+function onError(cb) {  // on-error callback cb(err) and release connection
+	var sql = this;
+	this.q.on("error", cb);
+	return this;
+}
+
+function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
+	this.q = this.query( query || "#ignore", args, function (err,recs) {  // smartTokens(query,args)
+		cb( err ? null : recs[0] );
+	});
+	
+	if (msg) msg.trace(this.q.sql);	
+	return this;
+}
+
+function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
+	
+	// smartTokens(query,args)
+	this.q = this.query( query || "#ignore", args).on("result", cb);
+	
+	if (msg) msg.trace(this.q.sql);	
+	return this;
+}
+
+function forAll(msg, query, args, cb) { // callback cb(recs) if no error
+	this.q = this.query( query || "#ignore", args, function (err,recs) {
+		if (!err) if(cb) cb( recs );
+	})
+	
+	if (msg) msg.trace(this.q.sql);	
+	return this;
 }
 
 function sqlThread(cb) {  // callback cb(sql) with a sql connection
@@ -882,28 +917,15 @@ function sqlContext(ctx, cb) {
 	});
 }
 
-function getTables(db, cb) {
-	var 
-		key = `Tables_in_${db}`,
-		tables = [];
-				  
-	this.query( "SHOW TABLES FROM ??", [db], function (err, recs) {
-		if ( !err ) {
-			recs.forEach( function (rec) {
-				//tables[ rec[key] ] = db;
-				tables.push( rec[key] );
-			});
-			cb( tables );
-		}
-	});
-}
+//================== db jurnalling
 
 function build(opts) {
 	var
 		sql = this,
 		escape = MYSQL.escape,
 		escapeId = MYSQL.escapeId,
-		ex = ""; 
+		ex = "",
+		from = access( opts.from, opts );
 	
 	switch ( opts.crud ) {
 		case "select":
@@ -937,7 +959,7 @@ function build(opts) {
 				else 
 					opts.group = null;
 
-				Log(index);
+				Log( "jsdb piv", index);
 			}
 			else
 			if ( browse = opts.brows ) {
@@ -975,8 +997,10 @@ function build(opts) {
 			else
 				ex += "SELECT SQL_CALC_FOUND_ROWS *" ;
 			
-			if ( from = opts.from )
-				ex += sql.format(" FROM ??", from );
+			ex += sql.format(" FROM ??", from );
+
+			if ( join = opts.join )
+				ex += " " + join + " ";
 			
 			if ( where = sql.toQuery(opts.where) )
 				ex += sql.format(" WHERE least(?,1)", where );
@@ -1107,8 +1131,10 @@ function hawk(log) {  // journal changes
 		});
 	});
 }
-		
-function relock(unlockcb, lockcb) {  			// lock-unlock record 
+
+//================ form entry support
+
+function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 	var 
 		sql = this,
 		ctx = this.ctx,
@@ -1155,6 +1181,8 @@ function relock(unlockcb, lockcb) {  			// lock-unlock record
 		ctx.err = JSDB.errors.noLock;
 }
 
+//================ url query expressions (like x<10&y>=20&...) support
+
 function toQuery(query) {
 	for (var key in query) 
 		return new QUERY(query);
@@ -1172,8 +1200,10 @@ QUERY.prototype.toSqlString = function () {
 		var 
 			esc = escape(val),
 			op = key.substr(-1),
+			valKey = val + "",
 			id = escapeId( key.substr(0,key.length-op.length) );
 		
+		//Log("bld", key, val);
 		switch ( op ) {
 			case "*":
 				var vals = esc.split(",");
@@ -1218,9 +1248,10 @@ QUERY.prototype.toSqlString = function () {
 			case ":":
 
 				var 
-					jsons = (val+"").split("$"),
+					jsons = valKey.split("$"),
 					exprs = [];
 
+				//Log(id,val);
 				if ( jsons.length>1) {   // have a json extract id:=json expression
 					jsons.forEach( function (expr,n) {
 						if ( n ) exprs.push( escape( "$"+expr ) );
@@ -1230,8 +1261,12 @@ QUERY.prototype.toSqlString = function () {
 					return `json_extract( ${jsons[0]}, ${exprs} ) AS ${id}` ;
 				}
 
-				else   // have an sql askey:=sql expression
-					return `${val} AS ${id}` ;
+				else
+				if (valKey) // have an sql askey:=sql expression
+					return `${valKey} AS ${id}` ;
+				
+				else  // have a non-null test
+					return id;
 
 			default:
 				id = escapeId( key );
@@ -1246,12 +1281,84 @@ QUERY.prototype.toSqlString = function () {
 		rtn = [];
 
 	Each(this, function (key, val) {
-		if (val) 
+		//if (val) 
 			rtn.push( build( key, val ) );
 	});
 	
 	return rtn.join(", ");
 }
+
+//=============== query/fetch serialization
+
+function serialize( qs, ctx, cb ) {
+/*
+	sql.serialize( [ 
+			{query: "SELECT ... WHERE ?", save: "a", options: [...] }, 
+			{save: "news"},
+			{save: "/news"}		
+		], {}, (ctx) => {
+		ctx.a = ...
+		ctx.news = ....
+		ctx['/news'] = ...
+	});
+*/
+	var 
+		sql = this,
+		fetcher = JSDB.fetcher,
+		fetchRecs = function (rec, cb) {
+			if ( save = rec.save )
+				if ( save.charAt(0) == "/" ) // requesting http fetch
+					if ( fetcher )
+						fetcher( save, null, null, (info) => cb( info.parseJSON() ) );
+
+					else  // fetcher disabled / unconfigured
+						cb( null );
+
+				else   // requesting internal db
+					sql.query( 
+						rec.query || "SELECT * FROM ??", 
+						[ access(rec.save) ].concat(rec.options || []), 
+						(err, recs) => cb( err ? null : recs ) );
+			
+			else
+				cb( null );
+		};
+	
+	qs.serialize( fetchRecs, (q, recs) => {
+		if (q) 
+			if (recs) 
+				if ( recs.forEach ) {  // clone returned records 
+					var save = ctx[q.save] = [];
+					recs.forEach( (rec) => save.push( new Object(rec) ) );
+				} 
+		
+				else  // clone returned info
+					ctx[q.save] = [ new Object(rec) ];
+	
+			else
+				ctx[q.save] = null;
+	
+		else
+			cb( ctx );
+	});
+}
+
+function access( dsFrom , ctx ) {  //< returns proper db.table name
+	var dsTo = JSDB.reroute[dsFrom] || ( "app." + dsFrom);
+			
+	//Log(dsFrom, "->", dsTo);
+		
+	if ( typeof dsTo == "function" ) 
+		if ( ctx )   // secure access
+			return dsTo(ctx);
+		else 	// skip secure access
+			return "app."+ dsFrom;
+	
+	else
+		return dsTo;
+}
+
+//=============== execution tracing
 
 function Trace(msg,sql) {
 	TRACE.trace(msg,sql);
