@@ -1036,8 +1036,7 @@ function build(opts) {
 			break;
 			
 		case "update":
-			if ( from = opts.from )
-				ex += sql.format("UPDATE ??" , from);
+			ex += sql.format("UPDATE ??" , from);
 			
 			if ( set = opts.set )
 				ex += sql.format(" SET ?" , set);
@@ -1051,8 +1050,7 @@ function build(opts) {
 			break;
 			
 		case "delete":
-			if ( from = opts.from )
-				ex += sql.format("DELETE FROM ??" , from);
+			ex += sql.format("DELETE FROM ??" , from);
 			
 			if ( where = sql.toQuery(opts.where) )
 				ex += sql.format(" WHERE least(?,1)", where);
@@ -1063,8 +1061,7 @@ function build(opts) {
 			break;
 			
 		case "insert":
-			if ( from = opts.from )
-				ex += sql.format("INSERT INTO ??" , from);
+			ex += sql.format("INSERT INTO ??" , from);
 			
 			if ( set = sql.toQuery(opts.set) ) 
 				ex += sql.format(" SET ?", set);
