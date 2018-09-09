@@ -22,6 +22,9 @@ const { Copy,Each,Log } = require("enum");
 var
 	JSDB = module.exports = {
 		
+		queues: { 	//< reserve for job queues
+		},
+
 		reroute: {  //< default table -> db.table translators
 		},
 				
@@ -90,9 +93,9 @@ var
 						forFirst,
 						forEach,
 						forAll,
-						thenDo,
-						onEnd,
-						onError,
+						//thenDo,
+						//onEnd,
+						//onError,
 						
 						// misc
 						access,
@@ -413,8 +416,6 @@ function endBulk() {
  * insert(job,cb): add job and route to callback cb(job) when executed.
  */
 
-JSDB.queues = {};
-	
 function selectJob(where, cb) { 
 /*
 @method selectJob
@@ -773,6 +774,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 
 //================= record enumerators
 
+/*
 function thenDo(cb) {
 	var sql = this;
 	this.q.on("end", function () {
@@ -794,33 +796,37 @@ function onError(cb) {  // on-error callback cb(err) and release connection
 	var sql = this;
 	this.q.on("error", cb);
 	return this;
-}
+} */
 
 function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
-	this.q = this.query( query || "#ignore", args, function (err,recs) {  // smartTokens(query,args)
-		cb( err ? null : recs[0] );
+	return this.q = this.query( query || "#ignore", args, (err,recs) => {  
+		if ( err ) 
+			Trace(msg+" forFirst"+this.q.sql+err+"");
+		else {
+			if (msg) msg.trace(this.q.sql);	
+			if (cb) cb( recs[0] || null );
+		}
 	});
-	
-	if (msg) msg.trace(this.q.sql);	
-	return this;
 }
 
 function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
-	
-	// smartTokens(query,args)
-	this.q = this.query( query || "#ignore", args).on("result", cb);
-	
-	if (msg) msg.trace(this.q.sql);	
-	return this;
+	return this.q = this.query( query || "#ignore", args)
+	.on("error", (err) => Trace(msg+" forEach "+this.q.sql+err+"") )
+	.on("result", (rec) => {
+		if (msg) msg.trace(this.q.sql);	
+		if (cb) cb(rec);
+	});
 }
 
 function forAll(msg, query, args, cb) { // callback cb(recs) if no error
-	this.q = this.query( query || "#ignore", args, function (err,recs) {
-		if (!err) if(cb) cb( recs );
-	})
-	
-	if (msg) msg.trace(this.q.sql);	
-	return this;
+	return this.q = this.query( query || "#ignore", args, (err,recs) => {
+		if (err) 
+			Trace(msg+" forAll"+this.q.sql+err+"");
+		else {
+			if (msg) msg.trace(this.q.sql);	
+			if (cb) cb( recs );
+		}
+	});
 }
 
 function sqlThread(cb) {  // callback cb(sql) with a sql connection
@@ -886,7 +892,8 @@ function sqlEach(trace, query, args, cb) {
 	sqlThread( function (sql) {
 		sql.forEach( trace, query, args, function (rec) {
 			cb(rec, sql);
-		}).onEnd( );
+		})
+		.on("end", (err) => sql.release() );
 	});
 }
 
