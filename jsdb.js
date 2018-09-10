@@ -496,7 +496,7 @@ function deleteJob(req, cb) {
 				Task:job.task,
 				Client:job.client,
 				Class:job.class,
-				QoS:job.qos
+				QoS:job.qos  // [secs]
 			});
 
 			delete JSDB.queues[job.qos].batch[job.priority];
@@ -538,7 +538,7 @@ billing information.
 			queue = JSDB.queues[job.qos] = new Object({
 				timer: 0,
 				batch: {},
-				rate: job.qos,
+				rate: job.qos,  // [secs]
 				client: {}
 			});
 			
@@ -609,7 +609,7 @@ billing information.
 				Client: job.client || "",
 				Class: job.class || "",
 				Task: job.task || "",
-				QoS: job.qos || 0,
+				QoS: job.qos || 0,  // [secs]
 				// others 
 				State: 0,
 				Arrived	: new Date(),
