@@ -632,7 +632,7 @@ billing information.
 			}
 		], function (err,info) {  // increment work backlog for this job
 
-			//Log([job,err,info]);
+			//Log("insert job:, job,err,info);
 			
 			if (err) 
 				return Log(err);
