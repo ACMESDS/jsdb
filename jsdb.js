@@ -799,34 +799,35 @@ function onError(cb) {  // on-error callback cb(err) and release connection
 } */
 
 function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
-	return this.q = this.query( query || "#ignore", args, (err,recs) => {  
+	var q = this.query( query || "#ignore", args, (err,recs) => {  
 		if ( err ) 
-			Trace(msg+" forFirst"+this.q.sql+err+"");
-		else {
-			if (msg) msg.trace(this.q.sql);	
-			if (cb) cb( recs[0] || null );
-		}
+			Trace(msg+" forFirst"+q.sql+err+"");
+		else 
+			cb( recs[0] || null );
 	});
+	if (msg) msg.trace(q.sql);	
+	return q;
 }
 
 function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
-	return this.q = this.query( query || "#ignore", args)
-	.on("error", (err) => Trace(msg+" forEach "+this.q.sql+err+"") )
+	q = this.query( query || "#ignore", args)
+	.on("error", (err) => Trace(msg+" forEach "+q.sql+err+"") )
 	.on("result", (rec) => {
-		if (msg) msg.trace(this.q.sql);	
-		if (cb) cb(rec);
+		cb(rec);
 	});
+	if (msg) msg.trace(q.sql);	
+	return q;
 }
 
 function forAll(msg, query, args, cb) { // callback cb(recs) if no error
-	return this.q = this.query( query || "#ignore", args, (err,recs) => {
+	var q = this.query( query || "#ignore", args, (err,recs) => {
 		if (err) 
-			Trace(msg+" forAll"+this.q.sql+err+"");
-		else {
-			if (msg) msg.trace(this.q.sql);	
-			if (cb) cb( recs );
-		}
+			Trace(msg+" forAll"+q.sql+err+"");
+		else 
+			cb( recs );
 	});
+	if (msg) msg.trace(q.sql);	
+	return q;
 }
 
 function sqlThread(cb) {  // callback cb(sql) with a sql connection
