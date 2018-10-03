@@ -801,7 +801,7 @@ function onError(cb) {  // on-error callback cb(err) and release connection
 function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
 	var q = this.query( query || "#ignore", args, (err,recs) => {  
 		if ( err ) 
-			Trace(msg+" forFirst"+q.sql+err+"");
+			Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` );
 		else 
 			cb( recs[0] || null );
 	});
@@ -811,7 +811,7 @@ function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if er
 
 function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
 	q = this.query( query || "#ignore", args)
-	.on("error", (err) => Trace(msg+" forEach "+q.sql+err+"") )
+	.on("error", (err) => Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` ) )
 	.on("result", (rec) => {
 		cb(rec);
 	});
@@ -822,7 +822,7 @@ function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
 function forAll(msg, query, args, cb) { // callback cb(recs) if no error
 	var q = this.query( query || "#ignore", args, (err,recs) => {
 		if (err) 
-			Trace(msg+" forAll"+q.sql+err+"");
+			Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` );
 		else 
 			cb( recs );
 	});
