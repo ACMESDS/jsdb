@@ -805,7 +805,7 @@ function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if er
 		else 
 			cb( recs[0] || null );
 	});
-	if (msg) msg.trace(q.sql);	
+	if (msg) Trace( `${msg} ${q.sql}`, this);	
 	return q;
 }
 
@@ -815,7 +815,7 @@ function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
 	.on("result", (rec) => {
 		cb(rec);
 	});
-	if (msg) msg.trace(q.sql);	
+	if (msg) Trace( `${msg} ${q.sql}`, this);	
 	return q;
 }
 
@@ -826,7 +826,7 @@ function forAll(msg, query, args, cb) { // callback cb(recs) if no error
 		else 
 			cb( recs );
 	});
-	if (msg) msg.trace(q.sql);	
+	if (msg) Trace( `${msg} ${q.sql}`, this);	
 	return q;
 }
 
