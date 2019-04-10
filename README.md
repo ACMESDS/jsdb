@@ -94,7 +94,7 @@ JSDB is configured and started like this:
 		console.log( err ? "something evil happended" : "Im running");
 	});
 
-where [its configuration key](/shares/prm/jsdb/index.html) follow 
+where [its configuration keys](/shares/prm/jsdb/index.html) follow 
 the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 
 Require and config JSDB:
