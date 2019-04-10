@@ -78,16 +78,8 @@ or group recording according to its index.browse (file navigation) or index.pivo
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
 was configured), and willjournal the change when jounalling is enabled.
 
-## Databases
+## Usage
 
-openv.attrs   Defines default ATTRIBUTES on startup.  
-openv.hawks	 Queried for moderaters when journalling a dataset.
-openv.journal	Updated with changes when journalling enabled.
-openv.tracks	Updated when search tracking enabled.
-openv.locks	Updated when record locks used (e.g. using forms).
-app.X 	Scanned for tables that possess fulltext searchable fields.
-
-## Use
 JSDB is configured and started like this:
 
 	var TOTEM = require("../jsdb").config({
@@ -102,8 +94,8 @@ JSDB is configured and started like this:
 		console.log( err ? "something evil happended" : "Im running");
 	});
 
-where its configuration keys follow the [ENUM copy()](https://github.com/acmesds/enum) conventions and
-are described in its [PRM](/shares/prm/jsdb/index.html).
+where [its configuration key](/shares/prm/jsdb/index.html) follow 
+the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 
 Require and config JSDB:
 
@@ -169,10 +161,22 @@ Update ds record(s) matched by ds.where
 	
 ## Installation
 
-Clone from one of the repos.  You will typically want to redirect the following to your project
+Clone [JSDB database agnosticator](https://github.com/acmesds/enum) into your PROJECT/jsdb folder.  
+Clone [ENUM basic enumerators](https://github.com/acmesds/enum) into your PROJECT/enum folder.   
 
-	ln -s PROJECT/totem/test.js test.js
-	ln -s PROJECT/totem/maint.sh maint.sh
+### Required MySQL Databases
+
+openv.attrs   Defines default ATTRIBUTES on startup.  
+openv.hawks	 Queried for moderaters when journalling a dataset.
+openv.journal	Updated with changes when journalling enabled.
+openv.tracks	Updated when search tracking enabled.
+openv.locks	Updated when record locks used (e.g. using forms).
+app.X 	Scanned for tables that possess fulltext searchable fields.
+
+## Contributing
+
+See our [issues](/issues.view), [milestones](/milestones.view), [s/w requirements](/swreqts.view),
+and [h/w requirements](/hwreqts.view).
 
 ## License
 
