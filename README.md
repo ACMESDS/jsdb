@@ -85,11 +85,7 @@ JSDB is configured and started like this:
 	var TOTEM = require("../jsdb").config({
 			key: value, 						// set key
 			"key.key": value, 					// indexed set
-			"key.key.": value,					// indexed append
-			OBJECT: [ function (){}, ... ], 	// add OBJECT prototypes 
-			Function: function () {} 			// add chained initializer callback
-			:
-			:
+			"key.key.": value					// indexed append
 		}, function (err) {
 		console.log( err ? "something evil happended" : "Im running");
 	});
@@ -97,7 +93,7 @@ JSDB is configured and started like this:
 where [its configuration keys](/shares/prm/jsdb/index.html) follow 
 the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 
-Require and config JSDB:
+### Require and config JSDB
 
 	var JSDB = require("jsdb").config({ 
 	
@@ -119,7 +115,7 @@ Require and config JSDB:
 Its default DS generator and thread() method can be overridden if the default MySQL-Cluster 
 support does not suffice.
 
-Create dataset on a new sql thread
+### Create dataset on a new sql thread
 
 	JSDB.thread( function (sql) {
 	
@@ -127,32 +123,32 @@ Create dataset on a new sql thread
 		
 	});
 
-Create dataset and access each record
+### Create dataset and access each record
 
 	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,limit:[0,1],rec:function each(rec) {console.log(rec)}});
 	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:['x','%ll%'],rec:function each(rec) {console.log(rec)}});
 	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:['a',0,5],rec:function each(rec) {console.log(rec)}});
 	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:"a<30",rec:function each(rec) {console.log(rec)}});		
 
-Create dataset and access all records
+### Create dataset and access all records
 
 	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:{"a<30":null,"b!=0":null,"x like '%ll%'":null,ID:5},rec:function (recs) {console.log(recs)}});
 	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,order:[{property:"a",direction:"asc"}],rec:function (recs) {console.log(recs)}});
 	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,index:{pivot:"root"},group:"a,b",rec:function (recs) {console.log(recs)}});
 
-Select ds record(s) matched by ds.where
+### Select ds record(s) matched by ds.where
 
 	ds.where = [1,2];
 	ds.rec = function (rec) {
 		console.log(rec);
 	}
 
-Delete ds record(s) matched by ds.where
+### Delete ds record(s) matched by ds.where
 
 	ds.where = {ID:2}
 	ds.rec = null
 
-Update ds record(s) matched by ds.where
+### Update ds record(s) matched by ds.where
 
 	ds.where = null
 	ds.rec = [{a:1,b:2,ds:"hello"},{a:10,b:20,x:"there"}]
