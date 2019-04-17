@@ -25,7 +25,7 @@ var
 		queues: { 	//< reserve for job queues
 		},
 
-		reroute: {  //< default table -> db.table translators
+		reroute: {  //< default table -> db.table translators to protect or reroute tables
 		},
 				
 		errors: {		//< errors messages
@@ -98,7 +98,7 @@ var
 						//onError,
 						
 						// misc
-						access,
+						reroute,
 						serialize,
 						context,
 						cache,
@@ -405,7 +405,7 @@ function endBulk() {
 	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=1");
 }
 
-//=========== Job queue interface
+//=========== job queue interface
 /*
  * Job queue interface
  * 
@@ -687,7 +687,7 @@ function executeJob(req, exe) {
 	});
 }
 
-//=================
+//================= catalog interface
 
 function flattenCatalog(flags, catalog, limits, cb) {
 /**
@@ -925,7 +925,7 @@ function sqlContext(ctx, cb) {
 	});
 }
 
-//================== db jurnalling
+//================== db journalling
 
 function build(opts) {
 	var
@@ -933,7 +933,7 @@ function build(opts) {
 		escape = MYSQL.escape,
 		escapeId = MYSQL.escapeId,
 		ex = "",
-		from = access( opts.from, opts );
+		from = reroute( opts.from, opts );
 	
 	switch ( opts.crud ) {
 		case "select":
@@ -1137,7 +1137,7 @@ function hawk(log) {  // journal changes
 	});
 }
 
-//================ form entry support
+//================ form entry 
 
 function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 	var 
@@ -1186,7 +1186,7 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 		ctx.err = JSDB.errors.noLock;
 }
 
-//================ url query expressions (like x<10&y>=20&...) support
+//================ url query expressions 
 
 function toQuery(query) {
 	for (var key in query) 
@@ -1322,7 +1322,7 @@ function serialize( qs, ctx, cb ) {
 				else   // requesting internal db
 					sql.query( 
 						rec.query || "SELECT * FROM ??", 
-						[ access(rec.save) ].concat(rec.options || []), 
+						[ reroute(rec.save) ].concat(rec.options || []), 
 						(err, recs) => cb( err ? null : recs ) );
 			
 			else
@@ -1348,15 +1348,15 @@ function serialize( qs, ctx, cb ) {
 	});
 }
 
-function access( dsFrom , ctx ) {  //< returns proper db.table name
+function reroute( dsFrom , ctx ) {  //< translate db.table name to protect/reroute tables
 	var dsTo = JSDB.reroute[dsFrom] || ( "app." + dsFrom);
 			
 	//Log(dsFrom, "->", dsTo);
 		
 	if ( typeof dsTo == "function" ) 
-		if ( ctx )   // secure access
+		if ( ctx )   // secured access
 			return dsTo(ctx);
-		else 	// skip secure access
+		else 	// unsecure access
 			return "app."+ dsFrom;
 	
 	else
@@ -1369,7 +1369,7 @@ function Trace(msg,sql) {
 	TRACE.trace(msg,sql);
 }
 
-//======================= unit tests
+//=============== unit tests
 
 switch ( process.argv[2] ) { //< unit tests
 	case "?":
