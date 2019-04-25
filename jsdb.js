@@ -93,6 +93,7 @@ var
 						forFirst,
 						forEach,
 						forAll,
+						serialize,
 						//thenDo,
 						//onEnd,
 						//onError,
@@ -1361,6 +1362,13 @@ function reroute( dsFrom , ctx ) {  //< translate db.table name to protect/rerou
 	
 	else
 		return dsTo;
+}
+
+function serialize( msg, query, args, cb ) {
+	this.forAll( msg, query, args, (recs) => {
+		recs.forEach( (rec) => cb(rec) );		// feed each record to callback
+		cb(null);	// signal end
+	});
 }
 
 //=============== execution tracing
