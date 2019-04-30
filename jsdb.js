@@ -17,7 +17,7 @@ var
 	// 3rd party bindings
 	MYSQL = require("mysql");
 
-const { Copy,Each,Log } = require("enum");
+const { Copy,Each,Log,isFunction,isString } = require("enum");
 
 var
 	JSDB = module.exports = {
@@ -87,8 +87,9 @@ var
 						getTextKeys,
 						
 						// record enumerators
-						build,
-						run,
+						//buildQuery,
+						runQuery,
+						
 						relock,
 						forFirst,
 						forEach,
@@ -128,7 +129,7 @@ var
 								return this._ctx; 
 							},
 							set: function (ctx) { 
-								Log("sql set>>>>>>>>>>>", ctx); 
+								//Log("sql set>>>>>>>>>>>", ctx); 
 								this._ctx = ctx;
 							}
 						},
@@ -148,7 +149,7 @@ var
 										ctx.crud = "select";
 										switch (req.name) {
 											case "each":
-												return sql.run( ctx, null, function (err,recs) {
+												return sql.runQuery( ctx, null, function (err,recs) {
 													recs.forEach( function (rec) {
 														req(rec, me);
 													});
@@ -160,7 +161,7 @@ var
 
 											case "all":
 											default:
-												return sql.run( ctx, null, function (err,recs) {
+												return sql.runQuery( ctx, null, function (err,recs) {
 													req(recs, me);
 												});				
 										}
@@ -170,7 +171,7 @@ var
 										ctx.crud = "insert";
 										req.forEach( function (rec) {
 											ctx.set = rec;
-											sql.run( ctx, emit, function (err,info) {
+											sql.runQuery( ctx, emit, function (err,info) {
 												ctx.err = err;
 											});
 										});	
@@ -180,7 +181,7 @@ var
 										ctx.crud = "update";
 										ctx.set = req;
 										if ( query.ID ) 
-											sql.run( ctx, emit, function (err,info) {
+											sql.runQuery( ctx, emit, function (err,info) {
 												ctx.err = err;
 
 												if (true) {  // update change journal if enabled
@@ -197,7 +198,7 @@ var
 									case Number:  // delete
 										if ( query.ID ) {
 											ctx.crud = "delete";
-											sql.run( ctx, emit, function (err,info) {
+											sql.runQuery( ctx, emit, function (err,info) {
 												ctx.err = err;
 											});
 										}
@@ -843,7 +844,7 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 			if (cb)
 				cb(err);
 			else
-			if (args && args.constructor == Function)
+			if ( args && isFunction(args) )
 				args(err);
 
 			return This;
@@ -928,165 +929,166 @@ function sqlContext(ctx, cb) {
 
 //================== db journalling
 
-function build(opts) {
-	var
-		sql = this,
-		escape = MYSQL.escape,
-		escapeId = MYSQL.escapeId,
-		ex = "",
-		from = reroute( opts.from, opts );
+function runQuery(ctx, emit, cb) {
 	
-	switch ( opts.crud ) {
-		case "select":
-			if ( pivot = opts.pivot ) {
-				var 
-					where = opts.where || {},
-					slash = "_",
-					nodeID = where.NodeID || "root",
-					index = opts.index = (nodeID == "root") 
-						? {
-							"NodeID:": `group_concat(DISTINCT ID SEPARATOR '${slash}')`,
+	function buildQuery(sql,opts) {
+		var
+			escape = MYSQL.escape,
+			escapeId = MYSQL.escapeId,
+			ex = "",
+			from = reroute( opts.from, opts );
+
+		switch ( opts.crud ) {
+			case "select":
+				if ( pivot = opts.pivot ) {
+					var 
+						where = opts.where || {},
+						slash = "_",
+						nodeID = where.NodeID || "root",
+						index = opts.index = (nodeID == "root") 
+							? {
+								"NodeID:": `group_concat(DISTINCT ID SEPARATOR '${slash}')`,
+								"NodeCount:": "count(ID)",
+								"leaf:": "false",
+								"expandable:": "true",
+								"expanded:": "false"
+							}
+							: {
+								"NodeID:": `'${nodeID}`,
+								"NodeCount:": "true",
+								"leaf:": "true",
+								"expandable:": "true",
+								"expanded:": "false",
+								"ID:$": nodeID
+							};
+
+					if (nodeID == "root") {
+						opts.group = pivot;
+						delete where.NodeID;
+					}
+
+					else 
+						opts.group = null;
+
+					//Log( "jsdb piv", index);
+				}
+				
+				else
+				if ( browse = opts.brows ) {
+					var	
+						slash = "_", 
+						where = opts.where || {},
+						nodeID = where.NodeID,
+						nodes = nodeID ? nodeID.split(slash) : [],
+						pivots = browse.split(","),
+						group = opts.group = (nodes.length >= pivots.length)
+							? pivots.concat(["ID"])
+							: pivots.slice(0,nodes.length+1),
+						name = pivots[nodes.length] || "concat('ID',ID)",
+						path = group.join(",'"+slash+"',"),
+						index = opts.index = {
+							"NodeID:": `group_concat(DISTINCT ${path})`,
 							"NodeCount:": "count(ID)",
-							"leaf:": "false",
-							"expandable:": "true",
-							"expanded:": "false"
-						}
-						: {
-							"NodeID:": `'${nodeID}`,
-							"NodeCount:": "true",
-							"leaf:": "true",
-							"expandable:": "true",
-							"expanded:": "false",
-							"ID:$": nodeID
+							"path:": '/tbd',
+							"read:": "1",
+							"write:": "1",
+							"group:": "v1",
+							"locked:": "1"
 						};
 
-				if (nodeID == "root") {
-					opts.group = pivot;
+					index[name+":"] = `cast(${name} AS char)`;
+
 					delete where.NodeID;
-				}
-
-				else 
-					opts.group = null;
-
-				Log( "jsdb piv", index);
-			}
-			else
-			if ( browse = opts.brows ) {
-				var	
-					slash = "_", 
-					where = opts.where || {},
-					nodeID = where.NodeID,
-					nodes = nodeID ? nodeID.split(slash) : [],
-					pivots = browse.split(","),
-					group = opts.group = (nodes.length >= pivots.length)
-						? pivots.concat(["ID"])
-						: pivots.slice(0,nodes.length+1),
-					name = pivots[nodes.length] || "concat('ID',ID)",
-					path = group.join(",'"+slash+"',"),
-					index = opts.index = {
-						"NodeID:": `group_concat(DISTINCT ${path})`,
-						"NodeCount:": "count(ID)",
-						"path:": '/tbd',
-						"read:": "1",
-						"write:": "1",
-						"group:": "v1",
-						"locked:": "1"
-					};
-
-				index[name+":"] = `cast(${name} AS char)`;
-
-				delete where.NodeID;
-				nodes.forEach( function (node) {
-					where[ pivots[n] || "ID" ] = node;
-				});
-			}
-						
-			if ( index = sql.toQuery(opts.index) )
-				ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
-			else
-				ex += "SELECT SQL_CALC_FOUND_ROWS *" ;
-			
-			ex += sql.format(" FROM ??", from );
-
-			if ( join = opts.join )
-				ex += " " + join + " ";
-			
-			if ( where = sql.toQuery(opts.where) )
-				ex += sql.format(" WHERE least(?,1)", where );
-			
-			if ( having = sql.toQuery(opts.having) )
-				ex += sql.format(" HAVING least(?,1)", having );
-			
-			if ( sort = opts.sort ) 
-				try {
-					var by = [];
-					sort.forEach( function (opt) {
-						var key = escapeId(opt.property);
-						by.push(`${key} ${opt.direction}`);
+					nodes.forEach( function (node) {
+						where[ pivots[n] || "ID" ] = node;
 					});
-					by = by.join(",");
-					if (by) ex += ` ORDER BY ${by}`;
 				}
-				catch (err) {
-				}
-			
-			if ( group = opts.group ) 
-				ex += sql.format(" GROUP BY " + escapeId( group.split(",") ));
-			
-			if ( order = opts.order )
-				ex += sql.format(" ORDER BY " + escapeId( order.split(",") ));
-			
-			if (limit = opts.limit)
-				ex += sql.format(" LIMIT ?", limit);
 
-			if (offset = opts.offset)
-				ex += sql.format(" OFFSET ?", offset);
-			
-			break;
-			
-		case "update":
-			ex += sql.format("UPDATE ??" , from);
-			
-			if ( set = opts.set )
-				ex += sql.format(" SET ?" , set);
-			
-			if ( where = sql.toQuery(opts.where) )
-				ex += sql.format(" WHERE least(?,1)", where);
-			
-			else
-				ex = "#UPDATE NO WHERE";
-			
-			break;
-			
-		case "delete":
-			ex += sql.format("DELETE FROM ??" , from);
-			
-			if ( where = sql.toQuery(opts.where) )
-				ex += sql.format(" WHERE least(?,1)", where);
-			
-			else
-				ex = "#DELETE NO WHERE";
-			
-			break;
-			
-		case "insert":
-			ex += sql.format("INSERT INTO ??" , from);
-			
-			if ( set = sql.toQuery(opts.set) ) 
-				ex += sql.format(" SET ?", set);
-			
-			else
-				ex += sql.format(" () values ()", []);
-			
-			break;
+				if ( index = sql.toQuery(opts.index, true) )
+					ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
+				
+				else
+					ex += "SELECT SQL_CALC_FOUND_ROWS *" ;
+
+				ex += sql.format(" FROM ??", from );
+
+				if ( join = opts.join )
+					ex += " " + join + " ";
+
+				if ( where = sql.toQuery(opts.where) )
+					ex += sql.format(" WHERE least(?,1)", where );
+
+				if ( having = sql.toQuery(opts.having) )
+					ex += sql.format(" HAVING least(?,1)", having );
+
+				if ( sort = opts.sort ) 
+					try {
+						var by = [];
+						sort.forEach( function (opt) {
+							var key = escapeId(opt.property);
+							by.push(`${key} ${opt.direction}`);
+						});
+						by = by.join(",");
+						if (by) ex += ` ORDER BY ${by}`;
+					}
+					catch (err) {
+					}
+
+				if ( group = opts.group ) 
+					ex += sql.format(" GROUP BY " + escapeId( group.split(",") ));
+
+				if ( order = opts.order )
+					ex += sql.format(" ORDER BY " + escapeId( order.split(",") ));
+
+				if (limit = opts.limit)
+					ex += sql.format(" LIMIT ?", limit);
+
+				if (offset = opts.offset)
+					ex += sql.format(" OFFSET ?", offset);
+
+				break;
+
+			case "update":
+				ex += sql.format("UPDATE ??" , from);
+
+				if ( set = opts.set )
+					ex += sql.format(" SET ?" , set);
+
+				if ( where = sql.toQuery(opts.where) )
+					ex += sql.format(" WHERE least(?,1)", where);
+
+				else
+					ex = "#UPDATE NO WHERE";
+
+				break;
+
+			case "delete":
+				ex += sql.format("DELETE FROM ??" , from);
+
+				if ( where = sql.toQuery(opts.where) )
+					ex += sql.format(" WHERE least(?,1)", where);
+
+				else
+					ex = "#DELETE NO WHERE";
+
+				break;
+
+			case "insert":
+				ex += sql.format("INSERT INTO ??" , from);
+
+				if ( set = sql.toQuery(opts.set) ) 
+					ex += sql.format(" SET ?", set);
+
+				else
+					ex += sql.format(" () values ()", []);
+
+				break;
+		}
+
+		return ex;
 	}
 	
-	Log( ex );
-	return ex;
-}
-
-function run(ctx, emit, cb) {
-	if ( ex = this.build(ctx) ) 
+	if ( ex = buildQuery(this, ctx) ) 
 		if ( ctx.lock ) {
 			sql.ctx = ctx;
 			sql.relock( function () {  // sucessfully unlocked
@@ -1108,8 +1110,8 @@ function run(ctx, emit, cb) {
 
 				cb( err, info );
 
-				if ( 0 && emit && !err && ctx.client ) { // Notify other clients of change
-					Log("emitting", ctx);
+				if ( emit && !err && ctx.client ) { // Notify other clients of change
+					//Log("emitting", ctx);
 					emit( ctx.crud, {
 						path: "/"+ctx.from+".db", 
 						body: ctx.set, 
@@ -1189,11 +1191,27 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 
 //================ url query expressions 
 
-function toQuery(query) {
-	for (var key in query) 
-		return new QUERY(query);
+function toQuery(query, isKeys) {
+	if ( query )
+		if ( isString(query) ) 
+			if ( isKeys ) {
+				var 
+					escapeId = MYSQL.escapeId,
+					keys = query.split(",");
+				
+				keys.forEach( (key,n) => keys[n] = escapeId(key) );
+				return new QUERY({ "#": keys.join(",")});
+			}
+
+			else
+				return new QUERY({ "#":  query});
 	
-	return null;
+		else
+		for (var key in query) 
+			return new QUERY(query);
+
+	else
+		return null;
 }
 
 function QUERY(query) {
@@ -1202,15 +1220,17 @@ function QUERY(query) {
 
 QUERY.prototype.toSqlString = function () {
 	
-	function build(key, val, cb) {
+	function build(key, val) {
 		var 
 			esc = escape(val),
 			op = key.substr(-1),
 			valKey = val + "",
 			id = escapeId( key.substr(0,key.length-op.length) );
 		
-		//Log("bld", key, val);
 		switch ( op ) {
+			case "#":
+				return val;
+				
 			case "*":
 				var vals = esc.split(",");
 				return `${id} BETWEEN ${vals[0]} AND ${vals[1]}`;
@@ -1257,7 +1277,6 @@ QUERY.prototype.toSqlString = function () {
 					jsons = valKey.split("$"),
 					exprs = [];
 
-				//Log(id,val);
 				if ( jsons.length>1) {   // have a json extract id:=json expression
 					jsons.forEach( function (expr,n) {
 						if ( n ) exprs.push( escape( "$"+expr ) );
@@ -1286,9 +1305,8 @@ QUERY.prototype.toSqlString = function () {
 		escapeId = MYSQL.escapeId,
 		rtn = [];
 
-	Each(this, function (key, val) {
-		//if (val) 
-			rtn.push( build( key, val ) );
+	Each(this, (key, val) => {
+		rtn.push( build( key, val ) );
 	});
 	
 	return rtn.join(", ");
