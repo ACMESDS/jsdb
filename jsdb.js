@@ -74,7 +74,7 @@ var
 
 				sqlThread( function (sql) {
 
-					var ex = [  // extend sql connector with useful methods
+					[  // extend sql connector with useful methods
 						toQuery,
 						
 						// key getters
@@ -117,9 +117,7 @@ var
 						updateJob,
 						insertJob,
 						executeJob						
-					];
-					
-					ex.extend(sql.constructor);
+					].extend(sql.constructor);
 
 					sql.query("DELETE FROM openv.locks");
 
