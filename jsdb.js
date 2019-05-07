@@ -642,14 +642,18 @@ billing information.
 			if (job.credit)				// client still has credit so place it in the regulators
 				regulate( Copy(job,{}) , function (job) { // clone job and provide a callback when job departs
 					sqlThread( function (sql) {  // callback on new sql thread
-						cb(sql,job);
+						cb( job, sql );
 
-						sql.query( // reduce work backlog and update cpu utilization
-							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", [
-							// {Util: cpuavgutil()}, 
-							{ID: job.ID} //jobID 
-						]);
+						sql.query( // reduce work backlog 
+							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", 
+							{ID: job.ID} 
+						);
 	
+						sql.query( // charge client
+							"UPDATE openv.profiles SET Charge=Charge+1,Credit=Credit-1 WHERE ?", 
+							{Client: job.client} 
+						);
+						
 						sql.release();
 						/*
 						sql.query(  // mark job departed if no work remains
