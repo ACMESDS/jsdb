@@ -74,9 +74,7 @@ var
 
 				sqlThread( function (sql) {
 
-					[  // extend sql connector with useful methods
-						toQuery,
-						
+					[						
 						// key getters
 						getKeys,
 						getFields,
@@ -85,11 +83,12 @@ var
 						getSearchKeys,
 						getGeometryKeys,
 						getTextKeys,
-						
-						// record enumerators
-						//buildQuery,
+
+						// query processing
+						toQuery,
 						runQuery,
 						
+						// record enumerators
 						relock,
 						forFirst,
 						forEach,
@@ -139,8 +138,7 @@ var
 								var 
 									ctx = this._ctx,
 									sql = this,
-									query = ctx.where,
-									emit = JSDB.emit;									
+									query = ctx.where;
 
 								switch ((req||0).constructor) {
 									case Function:  // select
@@ -169,7 +167,7 @@ var
 										ctx.crud = "insert";
 										req.forEach( function (rec) {
 											ctx.set = rec;
-											sql.runQuery( ctx, emit, function (err,info) {
+											sql.runQuery( ctx, null, function (err,info) {
 												ctx.err = err;
 											});
 										});	
@@ -179,24 +177,15 @@ var
 										ctx.crud = "update";
 										ctx.set = req;
 										if ( query.ID ) 
-											sql.runQuery( ctx, emit, function (err,info) {
+											sql.runQuery( ctx, null, function (err,info) {
 												ctx.err = err;
-
-												if (true) {  // update change journal if enabled
-													sql.hawk({Dataset:ds, Field:""});  // journal entry for the record itself
-													if (false)   // journal entry for each record key being changed
-														for (var key in req) { 		
-															sql.hawk({Dataset:ds, Field:key});
-															sql.hawk({Dataset:"", Field:key});
-														}
-												}
 											});
 										break;
 										
 									case Number:  // delete
 										if ( query.ID ) {
 											ctx.crud = "delete";
-											sql.runQuery( ctx, emit, function (err,info) {
+											sql.runQuery( ctx, null, function (err,info) {
 												ctx.err = err;
 											});
 										}
@@ -251,7 +240,7 @@ var
 		
 		msql: null,  //< reserved for mysql connector
 		
-		emit: null,  //< reserved for socketio emit
+		//emitter: null,  //< reserved for socketio emitter
 			
 		thread: sqlThread,
 		forEach: sqlEach,
@@ -931,7 +920,7 @@ function sqlContext(ctx, cb) {
 
 //================== db journalling
 
-function runQuery(ctx, emit, cb) {
+function runQuery(ctx, emitter, cb) {
 	
 	function buildQuery(sql,opts) {
 		var
@@ -1112,9 +1101,9 @@ function runQuery(ctx, emit, cb) {
 
 				cb( err, info );
 
-				if ( emit && !err && ctx.client ) { // Notify other clients of change
+				if ( emitter && !err && ctx.client ) { // Notify other clients of change
 					//Log("emitting", ctx);
-					emit( ctx.crud, {
+					emitter( ctx.crud, {
 						path: "/"+ctx.from+".db", 
 						body: ctx.set, 
 						ID: ctx.where.ID, 
