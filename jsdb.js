@@ -1220,100 +1220,102 @@ function QUERY(query) {
 	for (var key in query) this[key] = query[key];
 }
 
-QUERY.prototype.toSqlString = function () {
+[
+	function toSqlString() {
 	
-	/*
-	function build(key, val) {
-		var 
-			esc = escape(val),
-			op = key.substr(-1),
-			valKey = val + "",
-			id = escapeId( key.substr(0,key.length-op.length) );
-		
-		switch ( op ) {
-			case "#":
-				return val; 
-				
-			case "*":
-				var vals = esc.split(",");
-				return `${id} BETWEEN ${vals[0]} AND ${vals[1]}`;
-
-			case "%":
-				return `${id} LIKE ${esc}`;
-
-			case "<":
-			case ">":
-			case "!":
-				return id + op + "=" + esc;
-
-			case "$":
-					
-				op = key.substr(-2);
+		/*
+		function build(key, val) {
+			var 
+				esc = escape(val),
+				op = key.substr(-1),
+				valKey = val + "",
 				id = escapeId( key.substr(0,key.length-op.length) );
-				
-				switch ( op ) {
-					case "/$":
-						return `MATCH(Search) AGAINST(${esc}) AS ${id}`;
-					case "^$":
-						return `MATCH(Search) AGAINST(${esc} IN BINARY MODE) AS ${id}`;
-					case "|$":
-						return `MATCH(Search) AGAINST(${esc} IN QUERY EXPANSION) AS ${id}`;
-					case "<$":
-					case ">$":
-						return id + op.substr(0,1) + esc;
-					case ":$":
-						return `instr( '_${val}_' , concat('_' , ${id} , '_'))`;
-					default:
-						return "";
-				}
-				
-			case "/":
-				return `MATCH(${id}) AGAINST(${esc})` ;
-			case "^":
-				return `MATCH(${id}) AGAINST(${esc} IN BINARY MODE)` ;
-			case "|":
-				return `MATCH(${id}) AGAINST(${esc} WITH QUERY EXPANSION)` ;
-			
-			case ":":
 
-				var 
-					jsons = valKey.split("$"),
-					exprs = [];
+			switch ( op ) {
+				case "#":
+					return val; 
 
-				if ( jsons.length>1) {   
-					jsons.forEach( function (expr,n) {
-						if ( n ) exprs.push( escape( "$"+expr ) );
-					});
+				case "*":
+					var vals = esc.split(",");
+					return `${id} BETWEEN ${vals[0]} AND ${vals[1]}`;
 
-					exprs = exprs.join(",");
-					return `json_extract( ${jsons[0]}, ${exprs} ) AS ${id}` ;
-				}
+				case "%":
+					return `${id} LIKE ${esc}`;
 
-				else
-				if (valKey) // have an sql askey:=sql expression
-					return `${valKey} AS ${id}` ;
-				
-				else  // have a non-null test
-					return id;
-				
-			default:
-				id = escapeId( key );
-				return `${id}=${esc}` ;
-		}
-	}  */
-	
-	var 
-		escape = MYSQL.escape,
-		escapeId = MYSQL.escapeId,
-		rtn = [];
+				case "<":
+				case ">":
+				case "!":
+					return id + op + "=" + esc;
 
-	Each(this, (key, val) => {
-		//rtn.push( build( key, val ) );
-		rtn.push( ( key.substr(-1) == "_" ) ? val : `${escapeId(key)} = ${escape(val)}` );
-	});
-	
-	return rtn.join(", ");
-}
+				case "$":
+
+					op = key.substr(-2);
+					id = escapeId( key.substr(0,key.length-op.length) );
+
+					switch ( op ) {
+						case "/$":
+							return `MATCH(Search) AGAINST(${esc}) AS ${id}`;
+						case "^$":
+							return `MATCH(Search) AGAINST(${esc} IN BINARY MODE) AS ${id}`;
+						case "|$":
+							return `MATCH(Search) AGAINST(${esc} IN QUERY EXPANSION) AS ${id}`;
+						case "<$":
+						case ">$":
+							return id + op.substr(0,1) + esc;
+						case ":$":
+							return `instr( '_${val}_' , concat('_' , ${id} , '_'))`;
+						default:
+							return "";
+					}
+
+				case "/":
+					return `MATCH(${id}) AGAINST(${esc})` ;
+				case "^":
+					return `MATCH(${id}) AGAINST(${esc} IN BINARY MODE)` ;
+				case "|":
+					return `MATCH(${id}) AGAINST(${esc} WITH QUERY EXPANSION)` ;
+
+				case ":":
+
+					var 
+						jsons = valKey.split("$"),
+						exprs = [];
+
+					if ( jsons.length>1) {   
+						jsons.forEach( function (expr,n) {
+							if ( n ) exprs.push( escape( "$"+expr ) );
+						});
+
+						exprs = exprs.join(",");
+						return `json_extract( ${jsons[0]}, ${exprs} ) AS ${id}` ;
+					}
+
+					else
+					if (valKey) // have an sql askey:=sql expression
+						return `${valKey} AS ${id}` ;
+
+					else  // have a non-null test
+						return id;
+
+				default:
+					id = escapeId( key );
+					return `${id}=${esc}` ;
+			}
+		}  */
+
+		var 
+			escape = MYSQL.escape,
+			escapeId = MYSQL.escapeId,
+			rtn = [];
+
+		Each(this, (key, val) => {
+			//rtn.push( build( key, val ) );
+			rtn.push( ( key.substr(-1) == "_" ) ? val : `${escapeId(key)} = ${escape(val)}` );
+		});
+
+		return rtn.join(", ");
+	}
+].extend(QUERY);
 
 //=============== query/fetch serialization
 
