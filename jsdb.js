@@ -1006,7 +1006,9 @@ function runQuery(ctx, emit, cb) {
 					});
 				}
 
-				if ( index = sql.toQuery(opts.index, true) )
+				Log("select", opts.index);
+				
+				if ( index = sql.toQuery(opts.index) )
 					ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
 				
 				else
@@ -1194,6 +1196,7 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 //================ url query expressions 
 
 function toQuery(query, isKeys) {
+	/*
 	if ( query )
 		if ( isString(query) ) 
 			if ( isKeys ) {
@@ -1208,12 +1211,11 @@ function toQuery(query, isKeys) {
 			else
 				return new QUERY({ "#":  query});
 	
-		else
-		for (var key in query) 
-			return new QUERY(query);
+		else */
+	for (var key in query) 
+		return new QUERY(query);
 
-	else
-		return null;
+	return null;
 }
 
 function QUERY(query) {
@@ -1222,6 +1224,7 @@ function QUERY(query) {
 
 QUERY.prototype.toSqlString = function () {
 	
+	/*
 	function build(key, val) {
 		var 
 			esc = escape(val),
@@ -1231,7 +1234,7 @@ QUERY.prototype.toSqlString = function () {
 		
 		switch ( op ) {
 			case "#":
-				return val;
+				return val; 
 				
 			case "*":
 				var vals = esc.split(",");
@@ -1272,14 +1275,14 @@ QUERY.prototype.toSqlString = function () {
 				return `MATCH(${id}) AGAINST(${esc} IN BINARY MODE)` ;
 			case "|":
 				return `MATCH(${id}) AGAINST(${esc} WITH QUERY EXPANSION)` ;
-				
+			
 			case ":":
 
 				var 
 					jsons = valKey.split("$"),
 					exprs = [];
 
-				if ( jsons.length>1) {   // have a json extract id:=json expression
+				if ( jsons.length>1) {   
 					jsons.forEach( function (expr,n) {
 						if ( n ) exprs.push( escape( "$"+expr ) );
 					});
@@ -1294,13 +1297,12 @@ QUERY.prototype.toSqlString = function () {
 				
 				else  // have a non-null test
 					return id;
-
+				
 			default:
 				id = escapeId( key );
 				return `${id}=${esc}` ;
 		}
-		
-	}
+	}  */
 	
 	var 
 		escape = MYSQL.escape,
@@ -1308,7 +1310,8 @@ QUERY.prototype.toSqlString = function () {
 		rtn = [];
 
 	Each(this, (key, val) => {
-		rtn.push( build( key, val ) );
+		//rtn.push( build( key, val ) );
+		rtn.push( ( key.substr(-1) == "_" ) ? val : `${escapeId(key)} = ${escape(val)}` );
 	});
 	
 	return rtn.join(", ");
