@@ -1006,8 +1006,6 @@ function runQuery(ctx, emit, cb) {
 					});
 				}
 
-				Log("select", opts.index);
-				
 				if ( index = sql.toQuery(opts.index) )
 					ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
 				
