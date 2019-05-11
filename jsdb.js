@@ -938,19 +938,21 @@ function runQuery(ctx, emitter, cb) {
 						nodeID = where.NodeID || "root",
 						index = opts.index = (nodeID == "root") 
 							? {
-								"NodeID:": `group_concat(DISTINCT ID SEPARATOR '${slash}')`,
-								"NodeCount:": "count(ID)",
-								"leaf:": "false",
-								"expandable:": "true",
-								"expanded:": "false"
+								Node: pivot,
+								ID: `group_concat(DISTINCT ID SEPARATOR '${slash}') AS ID`,
+								Count: "count(ID) AS Count",
+								leaf: "false AS leaf",
+								expandable: "true AS expandable",
+								expanded: "false AS expanded"
 							}
 							: {
-								"NodeID:": `'${nodeID}`,
-								"NodeCount:": "true",
-								"leaf:": "true",
-								"expandable:": "true",
-								"expanded:": "false",
-								"ID:$": nodeID
+								Node: pivot,
+								ID: `'${nodeID} AS ID`,
+								Count: "1 AS Count",
+								leaf: "true AS leaf",
+								expandable: "true AS expandable",
+								expanded: "false AS expanded"
+								//ID: `$${nodeID} AS ID`
 							};
 
 					if (nodeID == "root") {
@@ -978,13 +980,14 @@ function runQuery(ctx, emitter, cb) {
 						name = pivots[nodes.length] || "concat('ID',ID)",
 						path = group.join(",'"+slash+"',"),
 						index = opts.index = {
-							"NodeID:": `group_concat(DISTINCT ${path})`,
-							"NodeCount:": "count(ID)",
-							"path:": '/tbd',
-							"read:": "1",
-							"write:": "1",
-							"group:": "v1",
-							"locked:": "1"
+							Node: browse,
+							ID: `group_concat(DISTINCT ${path}) AS D`,
+							Count: "count(ID) AS Count",
+							path: '/tbd AS path',
+							read: "1 AS read",
+							write: "1 AS write",
+							group: "'v1' AS group",
+							locked: "1 AS locked"
 						};
 
 					index[name+":"] = `cast(${name} AS char)`;
@@ -1076,6 +1079,8 @@ function runQuery(ctx, emitter, cb) {
 				break;
 		}
 
+		if (opts.trace) Log(ex);
+		
 		return ex;
 	}
 	
