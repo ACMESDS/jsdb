@@ -106,6 +106,10 @@ var
 						hawk,
 						flattenCatalog,
 						
+						//escapeing,
+						function escape(arg) { return MYSQL.escape(arg); },
+						function escapeId(key) { return MYSQL.escapeId(key); }, 
+						
 						// bulk insert records
 						beginBulk,
 						endBulk,
