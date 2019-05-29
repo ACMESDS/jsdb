@@ -82,19 +82,6 @@ was configured), and willjournal the change when jounalling is enabled.
 
 JSDB is configured and started like this:
 
-	var TOTEM = require("../jsdb").config({
-			key: value, 						// set key
-			"key.key": value, 					// indexed set
-			"key.key.": value					// indexed append
-		}, function (err) {
-		console.log( err ? "something evil happended" : "Im running");
-	});
-
-where [its configuration keys](/shares/prm/jsdb/index.html) follow 
-the [ENUM deep copy conventions](https://github.com/acmesds/enum).
-
-### Require and config JSDB
-
 	var JSDB = require("jsdb").config({ 
 	
 		dbtx: {		// table translator
@@ -111,10 +98,14 @@ the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 		}
 
 	});
-	
-Its default DS generator and thread() method can be overridden if the default MySQL-Cluster 
-support does not suffice.
 
+where [its configuration keys](/shares/prm/jsdb/index.html) follow 
+the [ENUM deep copy conventions](https://github.com/acmesds/enum).
+
+Unit testing is done via:
+
+	npm test [ ? || J1 || ... ]
+	
 ### Create dataset on a new sql thread
 
 	JSDB.thread( function (sql) {
