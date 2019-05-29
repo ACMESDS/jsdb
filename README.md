@@ -69,14 +69,14 @@ supported using these ATTRIBUTES:
 	track: true | [false] 		// enable search tracking
 	ag: "..." 		// aggregate where/having with least(?,1), greatest(?,0), sum(?), ...
 
-The select query will callback the CB=each/all/clone/trace handler with each/all record(s) matched 
+The select query will callback the CB = [each || all || clone || trace] handler with each/all record(s) matched 
 by .where, indexed by  .index, ordered by .order ordering, grouped by .group, filtered by .having 
 and limited by .limit ATTRIBUTES.  Select will search for PATTERN 
 using its index.nlp (natural language parse), index.bin (binary mode), index.qex (query expansion), 
 or group recording according to its index.browse (file navigation) or index.pivot (joint statistics).
 
 Non-select queries will broadcast a change to all clients if a where.ID is presented (and an emiitter
-was configured), and willjournal the change when jounalling is enabled.
+was configured), and will journal the change when jounalling is enabled.
 
 ## Usage
 
