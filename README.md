@@ -200,9 +200,11 @@ openv.tracks	Updated when search tracking enabled.
 openv.locks	Updated when record locks used (e.g. using forms).
 app.X 	Scanned for tables that possess fulltext searchable fields.
 
-### Unit test
+### Manage 
 
-	npm test [ ? || B1 || B2 || ... ]	
+	npm run [ edit || start ]			# Configure environment
+	npm test [ ? || B1 || B2 || ... ]			# unit test
+	npm run [ prmprep || prmload ]		# Revise PRM
 
 ## Contributing
 
