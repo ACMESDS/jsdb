@@ -102,48 +102,88 @@ JSDB is configured and started like this:
 where [its configuration keys](/shares/prm/jsdb/index.html) follow 
 the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 
-Unit testing is done via:
-
-	npm test [ ? || J1 || ... ]
-	
 ### Create dataset on a new sql thread
 
-	JSDB.thread( function (sql) {
+	JSDB.thread( (sql) => {
 	
-		var ds = new JSDB.DS(sql,{table:"test.x",trace:1,rec:res});
+		var ds = new JSDB.DS(sql,{
+			table:"test.x", 
+			rec: (recs) => console.log(recs) 
+		});
 		
 	});
 
 ### Create dataset and access each record
 
-	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,limit:[0,1],rec:function each(rec) {console.log(rec)}});
-	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:['x','%ll%'],rec:function each(rec) {console.log(rec)}});
-	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:['a',0,5],rec:function each(rec) {console.log(rec)}});
-	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:"a<30",rec:function each(rec) {console.log(rec)}});		
+	var ds = new JSDB.DS(sql,{
+		table:"test.x",
+		limit:[0,1],
+		rec: function each(rec) {console.log(rec)}
+	});
+		
+	var ds = new JSDB.DS(sql,{
+		table:"test.x",
+		trace:1,
+		where:{ x: "x=12" },
+		rec: function each(rec) {console.log(rec)}});
+		
+	var ds = new JSDB.DS(sql,{
+		table:"test.x",
+		trace:1,
+		where:{ a: "a = 0.5"},
+		rec: function each(rec) {console.log(rec)}
+	});
+	
+	var ds = new JSDB.DS(sql,{
+		table:"test.x",
+		trace:1,
+		where:{ a: "a<30"},
+		rec: function each(rec) {console.log(rec)}
+	});
 
 ### Create dataset and access all records
 
-	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,where:{"a<30":null,"b!=0":null,"x like '%ll%'":null,ID:5},rec:function (recs) {console.log(recs)}});
-	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,order:[{property:"a",direction:"asc"}],rec:function (recs) {console.log(recs)}});
-	var ds = new JSDB.DS(sql,{table:"test.x",trace:1,index:{pivot:"root"},group:"a,b",rec:function (recs) {console.log(recs)}});
+	var ds = new JSDB.DS(sql,{
+		table:"test.x",
+		trace:1,
+		where:{
+			a: "a<30", 
+			b: "b!=0",
+			x: "x like '%find%'",
+			ID: "ID=5"},
+		rec: (recs) => console.log(recs)
+	});
+	
+	var ds = new JSDB.DS(sql,{
+		table:"test.x",
+		trace:1,
+		order:[{property:"a",direction:"asc"}],
+		rec: (recs) => console.log(recs)
+	});
+	
+	var ds = new JSDB.DS(sql,{
+		table:"test.x",
+		trace:1,
+		index:{pivot:"root"},
+		group:"a,b",
+		rec: (recs) => console.log(recs)
+	});
 
 ### Select ds record(s) matched by ds.where
 
-	ds.where = [1,2];
-	ds.rec = function (rec) {
-		console.log(rec);
-	}
+	ds.where = {ID: "ID=1"};
+	ds.rec = (rec) => console.log(rec);
 
 ### Delete ds record(s) matched by ds.where
 
-	ds.where = {ID:2}
+	ds.where = {ID:"ID=2"}
 	ds.rec = null
 
 ### Update ds record(s) matched by ds.where
 
 	ds.where = null
 	ds.rec = [{a:1,b:2,ds:"hello"},{a:10,b:20,x:"there"}]
-	ds.where = {ID:3}
+	ds.where = {ID: "ID=3"}
 	ds.rec = {a:100} 
 	
 ## Installation
@@ -159,6 +199,10 @@ openv.journal	Updated with changes when journalling enabled.
 openv.tracks	Updated when search tracking enabled.
 openv.locks	Updated when record locks used (e.g. using forms).
 app.X 	Scanned for tables that possess fulltext searchable fields.
+
+### Unit test
+
+	npm test [ ? || B1 || B2 || ... ]	
 
 ## Contributing
 

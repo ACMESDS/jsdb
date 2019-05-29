@@ -1318,7 +1318,15 @@ function Trace(msg,sql) {
 
 //=============== unit tests
 
+/**
+@class JSDB.Unit_Tests_Use_Cases
+*/
+
 switch ( process.argv[2] ) { //< unit tests
 	case "?":
-		Log("no unit tests defined");
+		Log("unit test with 'node jsdb.js [B1 || B2 || ...]'");
+		break;
+		
+	case "B1":
+	case "B2":
 }
