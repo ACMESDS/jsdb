@@ -120,7 +120,7 @@ var
 						updateJob,
 						insertJob,
 						executeJob						
-					].extend(sql.constructor);
+					].Extend(sql.constructor);
 
 					sql.query("DELETE FROM openv.locks");
 
@@ -219,7 +219,7 @@ var
 						dsKey = "Tables_in_" + dsFrom;
 
 					sql.query(`SHOW TABLES FROM ${dsFrom}`, function (err, recs) {
-						recs.each( function (n,rec) {
+						recs.forEach( rec => {
 							sql.getSearchKeys( ds = dsFrom + "." + rec[dsKey], [], function (keys) {
 								var attr = attrs[ds] = {};
 								for (var key in attrs.default) attr[key] = attrs.default[key];
@@ -257,9 +257,7 @@ var
 
 function getKeys(table, type, keys, cb) {
 	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, function (err, recs) {
-		recs.each( function (n,rec) {
-			keys.push(rec.Column_name);
-		});
+		recs.forEach( rec => keys.push(rec.Column_name) );
 		cb(keys);
 	});
 }
@@ -515,7 +513,7 @@ billing information.
 		var avgUtil = 0;
 		var cpus = OS.cpus();
 		
-		cpus.each(function (n,cpu) {
+		cpus.forEach( cpu => {
 			idle = cpu.times.idle;
 			busy = cpu.times.nice + cpu.times.sys + cpu.times.irq + cpu.times.user;
 			avgUtil += busy / (busy + idle);
@@ -669,7 +667,7 @@ function executeJob(req, exe) {
 	function flip(job) {  // flip job holding state
 		if ( queue = JSDB.queues[job.qos] ) 	// get job's qos queue
 			if ( batch = queue.batch[job.priority] )  // get job's priority batch
-				batch.each( function (n, test) {  // matched jobs placed into holding state
+				batch.forEach( test => {  // matched jobs placed into holding state
 					if ( test.task==job.task && test.client==job.client && test.class==job.class )
 						test.holding = !test.holding;
 				});
@@ -732,7 +730,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 					sql.query("select found_rows()")
 					.on('result', function (stat) {
 						
-						recs.each( function (n,rec) {						
+						recs.forEach( rec => {						
 							rtns.push( {
 								ID: rtns.length,
 								Ref: table,
@@ -1192,22 +1190,6 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 //================ url query expressions 
 
 function toQuery(query, isKeys) {
-	/*
-	if ( query )
-		if ( isString(query) ) 
-			if ( isKeys ) {
-				var 
-					escapeId = MYSQL.escapeId,
-					keys = query.split(",");
-				
-				keys.forEach( (key,n) => keys[n] = escapeId(key) );
-				return new QUERY({ "#": keys.join(",")});
-			}
-
-			else
-				return new QUERY({ "#":  query});
-	
-		else */
 	for (var key in query) 
 		return new QUERY(query);
 
@@ -1231,7 +1213,7 @@ function QUERY(query) {
 
 		return rtn.join(", ");
 	}
-].extend(QUERY);
+].Extend(QUERY);
 
 //=============== query/fetch serialization
 
@@ -1305,18 +1287,14 @@ function reroute( dsFrom , ctx ) {  //< translate db.table name to protect/rerou
 
 function serialize( msg, query, args, cb ) {
 	this.forAll( msg, query, args, (recs) => {
-		recs.forEach( (rec) => cb(rec) );		// feed each record to callback
+		recs.forEach( rec => cb(rec) );		// feed each record to callback
 		cb(null);	// signal end
 	});
 }
 
-//=============== execution tracing
-
-function Trace(msg,sql) {
+function Trace(msg,sql) {	//< execution tracing
 	TRACE.trace(msg,sql);
 }
-
-//=============== unit tests
 
 /**
 @class JSDB.Unit_Tests_Use_Cases
