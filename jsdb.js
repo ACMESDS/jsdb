@@ -72,7 +72,7 @@ var
 				
 				mysql.pool = MYSQL.createPool(mysql.opts);
 
-				sqlThread( function (sql) {
+				sqlThread( sql => {
 
 					[						
 						// key getters
@@ -93,7 +93,6 @@ var
 						forFirst,
 						forEach,
 						forAll,
-						serialize,
 						//thenDo,
 						//onEnd,
 						//onError,
@@ -150,7 +149,7 @@ var
 										switch (req.name) {
 											case "each":
 												return sql.runQuery( ctx, null, function (err,recs) {
-													recs.forEach( function (rec) {
+													recs.forEach( rec => {
 														req(rec, me);
 													});
 												});
@@ -169,7 +168,7 @@ var
 										
 									case Array:		// insert
 										ctx.crud = "insert";
-										req.forEach( function (rec) {
+										req.forEach( rec => {
 											ctx.set = rec;
 											sql.runQuery( ctx, null, function (err,info) {
 												ctx.err = err;
@@ -303,7 +302,7 @@ function getTables(db, cb) {
 				  
 	this.query( "SHOW TABLES FROM ??", [db], function (err, recs) {
 		if ( !err ) {
-			recs.forEach( function (rec) {
+			recs.forEach( rec => {
 				//tables[ rec[key] ] = db;
 				tables.push( rec[key] );
 			});
@@ -341,7 +340,7 @@ then the cb callback in not made.
 		sql.forFirst( 
 			"", 
 			"SELECT ID,Results FROM app.cache WHERE least(?,1) LIMIT 1", 
-			[ opts.key ], function (rec) {
+			[ opts.key ], rec => {
 
 			if (rec) 
 				try {
@@ -428,7 +427,7 @@ function selectJob(where, cb) {
 	.on("error", function (err) {
 		Log(err);
 	})
-	.on("result", function (rec) {
+	.on("result", rec => {
 		cb(rec);
 	});	
 }
@@ -632,7 +631,7 @@ billing information.
 			
 			if (job.credit)				// client still has credit so place it in the regulators
 				regulate( Copy(job,{}) , function (job) { // clone job and provide a callback when job departs
-					sqlThread( function (sql) {  // callback on new sql thread
+					sqlThread( sql => {  // callback on new sql thread
 						cb( job, sql );
 
 						sql.query( // reduce work backlog 
@@ -885,8 +884,8 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 }
 
 function sqlEach(trace, query, args, cb) {
-	sqlThread( function (sql) {
-		sql.forEach( trace, query, args, function (rec) {
+	sqlThread( sql => {
+		sql.forEach( trace, query, args, rec => {
 			cb(rec, sql);
 		})
 		.on("end", (err) => sql.release() );
@@ -894,8 +893,8 @@ function sqlEach(trace, query, args, cb) {
 }
 
 function sqlAll(trace, query, args, cb) {
-	sqlThread( function (sql) {
-		sql.forAll( trace, query, args, function (recs) {
+	sqlThread( sql => {
+		sql.forAll( trace, query, args, recs => {
 			cb(recs, sql);
 			sql.release();
 		});
@@ -903,8 +902,8 @@ function sqlAll(trace, query, args, cb) {
 }
 
 function sqlFirst(trace, query, args, cb) {
-	sqlThread( function (sql) {
-		sql.forFirst(trace, query, args, function (rec) {
+	sqlThread( sql => {
+		sql.forFirst(trace, query, args, rec => {
 			cb(rec, sql);
 			sql.release();
 		});
@@ -912,7 +911,7 @@ function sqlFirst(trace, query, args, cb) {
 }
 
 function sqlContext(ctx, cb) {
-	sqlThread( function (sql) {
+	sqlThread( sql => {
 		sql.context( ctx, function (dsctx) {
 			cb(dsctx, sql);
 			sql.release();
@@ -1219,44 +1218,52 @@ function QUERY(query) {
 
 function serialize( qs, ctx, cb ) {
 /*
-	sql.serialize( [ 
-			{query: "SELECT ... WHERE ?", save: "a", options: [...] }, 
-			{save: "news"},
-			{save: "/news"}		
-		], {}, (ctx) => {
-		ctx.a = ...
-		ctx.news = ....
-		ctx['/news'] = ...
+	sql.serialize({
+		ds1: "SELECT ... ",
+		ds2: "SELECT ... ", ...
+		ds3: "/dataset?...", 
+		ds4: "/dataset?...", ...
+	}, ctx, ctx => {
+		// ctx[ ds1 || ds2 || ... ] records
 	});
 */
 	var 
 		sql = this,
 		fetcher = JSDB.fetcher,
+		qlist = [],
 		fetchRecs = function (rec, cb) {
-			if ( save = rec.save )
-				if ( save.charAt(0) == "/" ) // requesting http fetch
-					if ( fetcher )
-						fetcher( save, null, null, (info) => cb( info.parseJSON() ) );
-
-					else  // fetcher disabled / unconfigured
-						cb( null );
-
-				else   // requesting internal db
-					sql.query( 
-						rec.query || "SELECT * FROM ??", 
-						[ reroute(rec.save) ].concat(rec.options || []), 
-						(err, recs) => cb( err ? null : recs ) );
+			var
+				save = rec.save,
+				query = rec.query;
 			
-			else
-				cb( null );
+			if ( query.charAt(0) == "/" ) // requesting http fetch
+				if ( fetcher )
+					fetcher( query, null, info => cb( info.parseJSON() ) );
+
+				else  // fetcher disabled / unconfigured
+					cb( null );
+
+			else   // requesting internal db
+				sql.query( 
+					query, 
+					[ reroute(save) ].concat(rec.options || []), 
+					(err, recs) => cb( err ? null : recs ) );
 		};
 	
-	qs.serialize( fetchRecs, (q, recs) => {
+	Each( qs, (ds,q)  => {
+		qlist.push({
+			query: q,
+			save: ds,
+			options: []
+		});
+	});
+	
+	qlist.serialize( fetchRecs, (q, recs) => {
 		if (q) 
 			if (recs) 
 				if ( recs.forEach ) {  // clone returned records 
 					var save = ctx[q.save] = [];
-					recs.forEach( (rec) => save.push( new Object(rec) ) );
+					recs.forEach( rec => save.push( new Object(rec) ) );
 				} 
 		
 				else  // clone returned info
@@ -1285,12 +1292,13 @@ function reroute( dsFrom , ctx ) {  //< translate db.table name to protect/rerou
 		return dsTo;
 }
 
+/*
 function serialize( msg, query, args, cb ) {
 	this.forAll( msg, query, args, (recs) => {
 		recs.forEach( rec => cb(rec) );		// feed each record to callback
 		cb(null);	// signal end
 	});
-}
+}  */
 
 function Trace(msg,sql) {	//< execution tracing
 	TRACE.trace(msg,sql);
