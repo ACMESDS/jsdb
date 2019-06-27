@@ -1,5 +1,5 @@
 // UNCLASSIFIED
-//
+
 /**
 @class JSDB
 @requires cluster
@@ -1259,20 +1259,21 @@ function serialize( qs, ctx, cb ) {
 	});
 	
 	qlist.serialize( fetchRecs, (q, recs) => {
-		if (q) 
-			if (recs) 
+		
+		if (q) // have recs
+			if (recs) 	// query ok
 				if ( recs.forEach ) {  // clone returned records 
 					var save = ctx[q.save] = [];
 					recs.forEach( rec => save.push( new Object(rec) ) );
 				} 
 		
 				else  // clone returned info
-					ctx[q.save] = [ new Object(rec) ];
+					ctx[q.save] = [ new Object(recs) ];
 	
-			else
+			else	// query error
 				ctx[q.save] = null;
 	
-		else
+		else  // at end
 			cb( ctx );
 	});
 }
