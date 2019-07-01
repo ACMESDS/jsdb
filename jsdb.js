@@ -1214,6 +1214,12 @@ function QUERY(query) {
 	}
 ].Extend(QUERY);
 
+[		
+	function SQLfind( val ) {
+		return ( val.indexOf("%")>=0) ? `${this} LIKE ${val} `  : `${this} = ${val} ` 
+	}
+].Extend(String);
+
 //=============== query/fetch serialization
 
 function serialize( qs, ctx, cb ) {
