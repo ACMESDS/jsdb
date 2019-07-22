@@ -805,7 +805,7 @@ function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if er
 
 function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
 	q = this.query( query || "#ignore", args)
-	.on("error", (err) => Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` ) )
+	.on("error", err => Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` ) )
 	.on("result", (rec) => {
 		cb(rec);
 	});
@@ -857,9 +857,9 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		};
 	}
 
-	if (mysql = JSDB.mysql) 
-		if ( mysql.pool) 
-			mysql.pool.getConnection( function (err,sql) {
+	if ( mysql = JSDB.mysql ) 
+		if ( mysql.pool ) 
+			mysql.pool.getConnection( (err,sql) => {
 				if (err) 
 					Log(JSDB.errors.noConnect, {
 						sqlpool: err,
@@ -888,7 +888,7 @@ function sqlEach(trace, query, args, cb) {
 		sql.forEach( trace, query, args, rec => {
 			cb(rec, sql);
 		})
-		.on("end", (err) => sql.release() );
+		.on("end", err => sql.release() );
 	});
 }
 
