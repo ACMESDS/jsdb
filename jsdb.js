@@ -500,13 +500,12 @@ function insertJob(job, cb) {
 /*
 @method insertJob
 @param {Object} job arriving job
-@param {Function} cb callback(sql,job) when job departs
+@param {Function} cb callback(job) when job departs
 
 Adds job to the specified (client,class,qos,task) queue.  A departing job will execute the supplied 
-callback cb(sql,job) on a new sql thread (or spawn a new process if job.cmd provided).  The job
-is regulated by its job.rate [s] (0 disables regulation). If the client's job.credit has been exhausted, the
-job is added to the queue, but not to the regulator.  Queues are periodically monitored to store 
-billing information.  
+callback cb(job) or spawn a new process if job.cmd provided.  The job is regulated by its job.rate [s] 
+(0 disables regulation). If the client's job.credit has been exhausted, the job is added to the queue, 
+but not to the regulator.  Queues are periodically monitored to store billing information.  
  */
 	function cpuavgutil() {				// compute average cpu utilization
 		var avgUtil = 0;
@@ -630,10 +629,10 @@ billing information.
 			job.ID = info.insertId || 0;
 			
 			if (job.credit)				// client still has credit so place it in the regulators
-				regulate( Copy(job,{}) , function (job) { // clone job and provide a callback when job departs
-					sqlThread( sql => {  // callback on new sql thread
-						cb( job, sql );
+				regulate( Copy(job,{}) , job => { // clone job and provide a callback when job departs
+					cb( job );
 
+					sqlThread( sql => {  // start new sql thread to save metrics
 						sql.query( // reduce work backlog 
 							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", 
 							{ID: job.ID} 
