@@ -1089,8 +1089,11 @@ function runQuery(ctx, emitter, cb) {
 			case "insert":
 				ex += sql.format("INSERT INTO ??" , from);
 
-				if ( set = sql.toQuery(opts.set) ) 
+				if ( set = sql.toQuery(opts.set) ) {
+					delete set.ID;
+					delete set.id;
 					ex += sql.format(" SET ?", set);
+				}
 
 				else
 					ex += sql.format(" () values ()", []);
