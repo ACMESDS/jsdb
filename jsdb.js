@@ -77,6 +77,7 @@ var
 					[						
 						// key getters
 						getKeys,
+						getTypes,
 						getFields,
 						getTables,
 						getJsonKeys,
@@ -258,6 +259,22 @@ function getKeys(table, type, keys, cb) {
 	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, function (err, recs) {
 		recs.forEach( rec => keys.push(rec.Column_name) );
 		cb(keys);
+	});
+}
+
+function getTypes(table, where, keys, cb) {
+	this.query( 
+		where 
+			? `SHOW FULL FIELDS FROM ${table} WHERE least(?,1)`
+			: `SHOW FULL FIELDS FROM ${table} `, 
+		
+		where, (err, recs) => {
+			
+			//Log(table, err);
+			if (!err)
+				recs.forEach( rec => keys[rec.Field] = rec.Type );
+			
+			if (cb) cb(keys);
 	});
 }
 
