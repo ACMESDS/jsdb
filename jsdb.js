@@ -77,6 +77,7 @@ var
 					[						
 						// key getters
 						getKeys,
+						getTypes,
 						getFields,
 						getTables,
 						getTypes,
@@ -271,12 +272,14 @@ function getTypes(table, where, keys, cb) {
 		where, (err, recs) => {
 			
 			//Log(table, err);
-			if (!err)
+			if (!err) {
 				recs.forEach( (rec,n) => {
 					keys[rec.Field] = rec.Type;
 				});
+				recs.forEach( rec => keys[rec.Field] = rec.Type );
 			
-			if (cb) cb(keys);
+				if (cb) cb(keys);
+			}
 	});
 }
 
