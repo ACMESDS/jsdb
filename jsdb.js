@@ -1310,8 +1310,9 @@ function serialize( qs, ctx, cb ) {
 
 function reroute( ds , ctx ) {  //< translate db.table name to protect/reroute tables
 	var 
+		routes = JSDB.reroute,
 		[x,db,table] = ds.match(/(.*)_(.*)/) || [ "", "app", ds ],
-		ds = (ctx ? JSDB.reroute[table] : null ) || (db + "." + table);
+		ds = (ctx ? routes[table] : null ) || ( (routes[db] || db) + "." + (routes[table] || table) );
 			
 	return ( typeof ds == "function" ) ? ds(ctx) : ds;
 }
