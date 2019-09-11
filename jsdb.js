@@ -984,7 +984,7 @@ function runQuery(ctx, emitter, cb) {
 				}
 				
 				else
-				if ( browse = opts.brows ) {
+				if ( browse = opts.browse ) {
 					var	
 						slash = "_", 
 						where = opts.where || {},
@@ -1303,19 +1303,12 @@ function serialize( qs, ctx, cb ) {
 	});
 }
 
-function reroute( dsFrom , ctx ) {  //< translate db.table name to protect/reroute tables
-	var dsTo = JSDB.reroute[dsFrom] || ( "app." + dsFrom);
+function reroute( ds , ctx ) {  //< translate db.table name to protect/reroute tables
+	var 
+		[x,db,table] = ds.match(/(.*)_(.*)/) || [ "", "app", ds ],
+		ds = (ctx ? JSDB.reroute[table] : null ) || (db + "." + table);
 			
-	//Log(dsFrom, "->", dsTo);
-		
-	if ( typeof dsTo == "function" ) 
-		if ( ctx )   // secured access
-			return dsTo(ctx);
-		else 	// unsecure access
-			return "app."+ dsFrom;
-	
-	else
-		return dsTo;
+	return ( typeof ds == "function" ) ? ds(ctx) : ds;
 }
 
 /*
