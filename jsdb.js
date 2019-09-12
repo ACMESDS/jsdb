@@ -1173,8 +1173,7 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 	if (ID)
 		sql.query(  // attempt to unlock a locked record
 			"DELETE FROM openv.locks WHERE least(?)", 
-			lockID, 
-			function (err,info) {
+			lockID, (err,info) => {
 
 			if (err)
 				ctx.err = JSDB.errors.failLock;
@@ -1189,14 +1188,13 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 			if (lockcb)  // attempt to lock this record
 				sql.query(
 					"INSERT INTO openv.locks SET ?",
-					lockID, 
-					function (err,info) {
+					lockID, (err,info) => {
 
 					if (err)
 						ctx.err = JSDB.errors.isLocked;
 
 					else
-						sql.query( "START TRANSACTION", function (err) {  // queue this transaction
+						sql.query( "START TRANSACTION", err => {  // queue this transaction
 							lockcb();
 						});
 				});	
@@ -1246,7 +1244,7 @@ function QUERY(query) {
 
 //=============== query/fetch serialization
 
-function serialize( qs, ctx, cb ) {
+function serialize( qs, opts, ctx, cb ) {
 /*
 	sql.serialize({
 		ds1: "SELECT ... ",
@@ -1263,10 +1261,10 @@ function serialize( qs, ctx, cb ) {
 		qlist = [],
 		fetchRecs = function (rec, cb) {
 			var
-				save = rec.save,
+				ds = rec.ds,
 				query = rec.query;
 			
-			if ( query.charAt(0) == "/" ) // requesting http fetch
+			if ( query.startsWith("/") ) // requesting http fetch
 				if ( fetcher )
 					fetcher( query, null, info => cb( info.parseJSON() ) );
 
@@ -1276,15 +1274,15 @@ function serialize( qs, ctx, cb ) {
 			else   // requesting internal db
 				sql.query( 
 					query, 
-					[ reroute(save) ].concat(rec.options || []), 
+					[ reroute(ds) ].concat( rec.options || [] ), 
 					(err, recs) => cb( err ? null : recs ) );
 		};
 	
 	Each( qs, (ds,q)  => {
 		qlist.push({
 			query: q,
-			save: ds,
-			options: []
+			ds: ds,
+			options: opts
 		});
 	});
 	
@@ -1293,15 +1291,15 @@ function serialize( qs, ctx, cb ) {
 		if (q) // have recs
 			if (recs) 	// query ok
 				if ( recs.forEach ) {  // clone returned records 
-					var save = ctx[q.save] = [];
+					var save = ctx[q.ds] = [];
 					recs.forEach( rec => save.push( new Object(rec) ) );
 				} 
 		
 				else  // clone returned info
-					ctx[q.save] = [ new Object(recs) ];
+					ctx[q.ds] = [ new Object(recs) ];
 	
 			else	// query error
-				ctx[q.save] = null;
+				ctx[q.ds] = null;
 	
 		else  // at end
 			cb( ctx );
