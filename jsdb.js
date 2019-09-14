@@ -17,7 +17,7 @@ var
 	// 3rd party bindings
 	MYSQL = require("mysql");
 
-const { Copy,Each,Log,isFunction,isString } = require("enum");
+const { Copy,Each,Log,isFunction,isString,isArray } = require("enum");
 
 var
 	JSDB = module.exports = {
@@ -77,14 +77,13 @@ var
 					[						
 						// key getters
 						getKeys,
-						getTypes,
+						//getTypes,
 						getFields,
 						getTables,
-						getTypes,
-						getJsonKeys,
-						getSearchKeys,
-						getGeometryKeys,
-						getTextKeys,
+						getJsons,
+						getSearchables,
+						getGeometries,
+						getTexts,
 
 						// query processing
 						toQuery,
@@ -150,7 +149,7 @@ var
 										ctx.crud = "select";
 										switch (req.name) {
 											case "each":
-												return sql.runQuery( ctx, null, function (err,recs) {
+												return sql.runQuery( ctx, null, (err,recs) => {
 													recs.forEach( rec => {
 														req(rec, me);
 													});
@@ -162,7 +161,7 @@ var
 
 											case "all":
 											default:
-												return sql.runQuery( ctx, null, function (err,recs) {
+												return sql.runQuery( ctx, null, (err,recs) => {
 													req(recs, me);
 												});				
 										}
@@ -172,7 +171,7 @@ var
 										ctx.crud = "insert";
 										req.forEach( rec => {
 											ctx.set = rec;
-											sql.runQuery( ctx, null, function (err,info) {
+											sql.runQuery( ctx, null, (err,info) => {
 												ctx.err = err;
 											});
 										});	
@@ -182,7 +181,7 @@ var
 										ctx.crud = "update";
 										ctx.set = req;
 										if ( query.ID ) 
-											sql.runQuery( ctx, null, function (err,info) {
+											sql.runQuery( ctx, null, (err,info) => {
 												ctx.err = err;
 											});
 										break;
@@ -190,14 +189,14 @@ var
 									case Number:  // delete
 										if ( query.ID ) {
 											ctx.crud = "delete";
-											sql.runQuery( ctx, null, function (err,info) {
+											sql.runQuery( ctx, null, (err,info) => {
 												ctx.err = err;
 											});
 										}
 										break;
 										
 									case String:		// locking / unlocking
-										sql.relock(function () {  // unlocked
+										sql.relock( () => {  // unlocked
 											switch (req) {
 												case "select": break;
 												case "delete": 	sql.ds = null; break;
@@ -205,7 +204,7 @@ var
 												case "insert":	sql.ds = [ctx.set]; break;
 											}
 
-										}, function () {  // locked
+										}, () => {  // locked
 											//res( rec );
 										});
 										break;
@@ -219,9 +218,9 @@ var
 						dsFrom = "app",
 						dsKey = "Tables_in_" + dsFrom;
 
-					sql.query(`SHOW TABLES FROM ${dsFrom}`, function (err, recs) {
+					sql.query(`SHOW TABLES FROM ${dsFrom}`, (err,recs) => {
 						recs.forEach( rec => {
-							sql.getSearchKeys( ds = dsFrom + "." + rec[dsKey], [], function (keys) {
+							sql.getSearchables( ds = dsFrom + "." + rec[dsKey], keys => {
 								var attr = attrs[ds] = {};
 								for (var key in attrs.default) attr[key] = attrs.default[key];
 								attr.search = keys.join(",");
@@ -257,29 +256,9 @@ var
 //============ key access
 
 function getKeys(table, type, keys, cb) {
-	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, function (err, recs) {
+	this.query(`SHOW KEYS FROM ${table} WHERE ?`,{Index_type:type}, (err,recs) => {
 		recs.forEach( rec => keys.push(rec.Column_name) );
 		cb(keys);
-	});
-}
-
-function getTypes(table, where, keys, cb) {
-	this.query( 
-		where 
-			? `SHOW FULL FIELDS FROM ${table} WHERE least(?,1)`
-			: `SHOW FULL FIELDS FROM ${table} `, 
-		
-		where, (err, recs) => {
-			
-			//Log(table, err);
-			if (!err) {
-				recs.forEach( (rec,n) => {
-					keys[rec.Field] = rec.Type;
-				});
-				recs.forEach( rec => keys[rec.Field] = rec.Type );
-			
-				if (cb) cb(keys);
-			}
 	});
 }
 
@@ -290,7 +269,30 @@ function getFields(table, where, keys, cb) {
 			: `SHOW FULL FIELDS FROM ${table} `, 
 		
 		where, (err, recs) => {
+			//Log(table, err);
+			if (!err) {
+				// Log(">>>>get", where, err, keys)
+				if ( isArray(keys) )
+					recs.forEach( (rec,n) => {
+						keys.push(rec.Field);
+					});
+					
+				else
+					recs.forEach( rec => keys[rec.Field] = rec.Type );
 			
+				if (cb) cb(keys);
+			}
+	});
+}
+
+/*
+function getFields(table, where, keys, cb) {
+	this.query( 
+		where 
+			? `SHOW FULL FIELDS FROM ${table} WHERE least(?,1)`
+			: `SHOW FULL FIELDS FROM ${table} `, 
+		
+		where, (err, recs) => {
 			//Log(table, err);
 			if (!err)
 				recs.forEach( (rec,n) => {
@@ -300,21 +302,22 @@ function getFields(table, where, keys, cb) {
 			if (cb) cb(keys);
 	});
 }
+*/
 
-function getJsonKeys(table, keys, cb) {
-	this.getFields(table, {Type:"json"}, keys, cb);
+function getJsons(table, cb) {
+	this.getFields(table, {Type:"json"}, [], cb);
 }
 
-function getTextKeys(table, keys, cb) {
-	this.getFields(table, {Type:"mediumtext"}, keys, cb);
+function getTexts(table, cb) {
+	this.getFields(table, {Type:"mediumtext"}, [], cb);
 }
 
-function getSearchKeys(table, keys, cb) {
-	this.getKeys(table, "fulltext", keys, cb);
+function getSearchables(table, cb) {
+	this.getKeys(table, "fulltext", [], cb);
 }
 
-function getGeometryKeys(table, keys, cb) {
-	this.getFields(table, {Type:"geometry"}, keys, cb);
+function getGeometries(table, cb) {
+	this.getFields(table, {Type:"geometry"}, [], cb);
 }
 
 function getTables(db, cb) {
@@ -322,7 +325,7 @@ function getTables(db, cb) {
 		key = `Tables_in_${db}`,
 		tables = [];
 				  
-	this.query( "SHOW TABLES FROM ??", [db], function (err, recs) {
+	this.query( "SHOW TABLES FROM ??", [db], (err,recs) => {
 		if ( !err ) {
 			recs.forEach( rec => {
 				//tables[ rec[key] ] = db;
@@ -417,16 +420,15 @@ function endBulk() {
 	this.query("SET GLOBAL innodb-flush-log-at-trx-commit=1");
 }
 
-//=========== job queue interface
 /*
- * Job queue interface
- * 
- * select(where,cb): route valid jobs matching sql-where clause to its assigned callback cb(job).
- * execute(client,job,cb): create detector-trainging job for client with callback to cb(job) when completed.
- * update(where,rec,cb): set attributes of jobs matching sql-where clause and route to callback cb(job) when updated.
- * delete(where,cb): terminate jobs matching sql-whereJob cluase then callback cb(job) when terminated.
- * insert(job,cb): add job and route to callback cb(job) when executed.
- */
+Job queue interface
+ 
+select(where,cb): route valid jobs matching sql-where clause to its assigned callback cb(job).
+execute(client,job,cb): create detector-trainging job for client with callback to cb(job) when completed.
+update(where,rec,cb): set attributes of jobs matching sql-where clause and route to callback cb(job) when updated.
+delete(where,cb): terminate jobs matching sql-whereJob cluase then callback cb(job) when terminated.
+insert(job,cb): add job and route to callback cb(job) when executed.
+*/
 
 function selectJob(where, cb) { 
 /*
@@ -641,7 +643,7 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 				Notes: job.notes,
 				Task: job.task || ""
 			}
-		], function (err,info) {  // increment work backlog for this job
+		], (err,info) => {  // increment work backlog for this job
 
 			//Log("insert job", job,err,info);
 			
@@ -731,8 +733,7 @@ function flattenCatalog(flags, catalog, limits, cb) {
 					? [table, limits.score, limits.records]
 					: [table, limits.records];
 
-			sql.query( query, args,  function (err,recs) {
-				
+			sql.query( query, args,  (err,recs) => {
 				if (err) {
 					rtns.push( {
 						ID: rtns.length,
@@ -749,7 +750,6 @@ function flattenCatalog(flags, catalog, limits, cb) {
 				else 
 					sql.query("select found_rows()")
 					.on('result', function (stat) {
-						
 						recs.forEach( rec => {						
 							rtns.push( {
 								ID: rtns.length,
@@ -778,7 +778,8 @@ function flattenCatalog(flags, catalog, limits, cb) {
 			stamp: new Date()
 			//pivots: flags._pivot || ""
 		};*/
-		
+	
+	// need to revise this to use serialize logic
 	flatten( sql, rtns, 0, FLEX.listify(catalog), catalog, limits, {
 		res: cb, 
 
@@ -1306,11 +1307,12 @@ function serialize( qs, opts, ctx, cb ) {
 	});
 }
 
-function reroute( ds , ctx ) {  //< translate db.table name to protect/reroute tables
+function reroute( ds , ctx ) {  //< route ds=table||db_table to a protector 
 	var 
 		routes = JSDB.reroute,
 		[x,db,table] = ds.match(/(.*)_(.*)/) || [ "", "app", ds ],
-		ds = (ctx ? routes[table] : null ) || ( (routes[db] || db) + "." + (routes[table] || table) );
+		ds = db + "." + table,
+		ds = ctx ? routes[ds] || ds : routes[ds] || ( routes[db] || db) + "." + (routes[table] || table );
 			
 	return ( typeof ds == "function" ) ? ds(ctx) : ds;
 }
