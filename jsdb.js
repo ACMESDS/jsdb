@@ -1,16 +1,13 @@
 // UNCLASSIFIED
 
 /**
-@class JSDB
+@class DB
 @requires cluster
 @requires enum
 @requires mysql
 */
 
-var 
-	// globals
-	TRACE = "B>",
-	
+var	
 	// nodejs modules
 	CLUSTER = require("cluster"),
 
@@ -20,238 +17,235 @@ var
 const { Copy,Each,Log,isFunction,isString,isArray } = require("enum");
 
 var
-	JSDB = module.exports = {
-		
-		queues: { 	//< reserve for job queues
-		},
+	DB = module.exports = (opts,cb) => {  // callback cb(sql connection)
+		if (opts) Copy(opts,DB,".");
 
-		reroute: {  //< default table -> db.table translators to protect or reroute tables
-		},
-				
-		errors: {		//< errors messages
-			noConnect: new Error("sql pool exhausted or undefined"),
-			nillUpdate: new Error("nill update query"),
-			unsafeQuery: new Error("unsafe queries not allowed"),
-			unsupportedQuery: new Error("query not supported"),
-			invalidQuery: new Error("query invalid"),
-			noTable: new Error("dataset definition missing table name"),
-			noDB: new Error("no database connected"),
-			noLock: new Error("record lock ID missing"),
-			isUnlocked: new Error("record never locked"),
-			failLock: new Error("record locking failed"),
-			isLocked: new Error("record already locked"),
-			noExe: new Error("record execute undefined"),
-			noRecord: new Error("no record found")
-		},
+		//Trace("CONFIG DB");
 
-		fetcher: null, //() => Trace("data fetcher not configured"), //< data fetcher
-		
-		attrs: {		//< reserved for dataset attributes derived during config
-			default:	{ 					// default dataset attributes
-				sql: null, // sql connector
-				query: "",  // sql query
-				opts: null,	// ?-options to sql query
-				unsafeok: true,  // allow/disallow unsafe queries
-				trace: false,   // trace ?-compressed sql queries
-				journal: true,	// attempt journally of updates to jou.table database
-				ag: "", 		// default aggregator "" implies "least(?,1)"
-				index: {select:"*"}, 	// data search and index
-				client: "guest", 		// default client 
-				track: false, 		// change journal tracking
-				search: ""  // key,key, .... fulltext keys to search
-			}		
-		},
-		
-		config: function (opts, cb) {  // callback cb(sql connection)
-			
-			if (opts) Copy(opts,JSDB,".");
-			
-			//Trace("CONFIG JSDB");
-			
-			if (mysql = JSDB.mysql) {
-				
-				mysql.pool = MYSQL.createPool(mysql.opts);
+		if (mysql = DB.mysql) {
+			mysql.pool = MYSQL.createPool(mysql.opts);
 
-				sqlThread( sql => {
+			sqlThread( sql => {
 
-					[						
-						// key getters
-						getKeys,
-						//getTypes,
-						getFields,
-						getTables,
-						getJsons,
-						getSearchables,
-						getGeometries,
-						getTexts,
+				[						
+					// key getters
+					getKeys,
+					//getTypes,
+					getFields,
+					getTables,
+					getJsons,
+					getSearchables,
+					getGeometries,
+					getTexts,
 
-						// query processing
-						toQuery,
-						runQuery,
-						
-						// record enumerators
-						relock,
-						forFirst,
-						forEach,
-						forAll,
-						//thenDo,
-						//onEnd,
-						//onError,
-						
-						// misc
-						reroute,
-						serialize,
-						context,
-						cache,
-						hawk,
-						flattenCatalog,
-						
-						//escapeing,
-						function escape(arg) { return MYSQL.escape(arg); },
-						function escapeId(key) { return MYSQL.escapeId(key); }, 
-						
-						// bulk insert records
-						beginBulk,
-						endBulk,
-						
-						// job processing
-						selectJob,
-						deleteJob,
-						updateJob,
-						insertJob,
-						executeJob						
-					].Extend(sql.constructor);
+					// query processing
+					toQuery,
+					runQuery,
 
-					sql.query("DELETE FROM openv.locks");
+					// record enumerators
+					relock,
+					forFirst,
+					forEach,
+					forAll,
+					//thenDo,
+					//onEnd,
+					//onError,
 
-					Object.defineProperties( sql.constructor.prototype, {
-						ctx: {
-							get: function () { 
-								return this._ctx; 
-							},
-							set: function (ctx) { 
-								//Log("sql set>>>>>>>>>>>", ctx); 
-								this._ctx = ctx;
-							}
+					// misc
+					reroute,
+					serialize,
+					context,
+					cache,
+					hawk,
+					flattenCatalog,
+
+					//escapeing,
+					function escape(arg) { return MYSQL.escape(arg); },
+					function escapeId(key) { return MYSQL.escapeId(key); }, 
+
+					// bulk insert records
+					beginBulk,
+					endBulk,
+
+					// job processing
+					selectJob,
+					deleteJob,
+					updateJob,
+					insertJob,
+					executeJob						
+				].Extend(sql.constructor);
+
+				sql.query("DELETE FROM openv.locks");
+
+				Object.defineProperties( sql.constructor.prototype, {
+					ctx: {
+						get: function () { 
+							return this._ctx; 
 						},
-						ds: {
-							get: function () {
-								return this._ctx.err;
-							},
-							set: function (req) {
-								var 
-									ctx = this._ctx,
-									sql = this,
-									query = ctx.where;
+						set: function (ctx) { 
+							//Log("sql set>>>>>>>>>>>", ctx); 
+							this._ctx = ctx;
+						}
+					},
+					ds: {
+						get: function () {
+							return this._ctx.err;
+						},
+						set: function (req) {
+							var 
+								ctx = this._ctx,
+								sql = this,
+								query = ctx.where;
 
-								switch ((req||0).constructor) {
-									case Function:  // select
-										ctx.crud = "select";
-										switch (req.name) {
-											case "each":
-												return sql.runQuery( ctx, null, (err,recs) => {
-													recs.forEach( rec => {
-														req(rec, me);
-													});
+							switch ((req||0).constructor) {
+								case Function:  // select
+									ctx.crud = "select";
+									switch (req.name) {
+										case "each":
+											return sql.runQuery( ctx, null, (err,recs) => {
+												recs.forEach( rec => {
+													req(rec, me);
 												});
-
-											case "clone":
-											case "trace":
-												return;
-
-											case "all":
-											default:
-												return sql.runQuery( ctx, null, (err,recs) => {
-													req(recs, me);
-												});				
-										}
-										break;
-										
-									case Array:		// insert
-										ctx.crud = "insert";
-										req.forEach( rec => {
-											ctx.set = rec;
-											sql.runQuery( ctx, null, (err,info) => {
-												ctx.err = err;
 											});
-										});	
-										break;
-										
-									case Object:		// update
-										ctx.crud = "update";
-										ctx.set = req;
-										if ( query.ID ) 
-											sql.runQuery( ctx, null, (err,info) => {
-												ctx.err = err;
-											});
-										break;
-										
-									case Number:  // delete
-										if ( query.ID ) {
-											ctx.crud = "delete";
-											sql.runQuery( ctx, null, (err,info) => {
-												ctx.err = err;
-											});
-										}
-										break;
-										
-									case String:		// locking / unlocking
-										sql.relock( () => {  // unlocked
-											switch (req) {
-												case "select": break;
-												case "delete": 	sql.ds = null; break;
-												case "update":	sql.ds = ctx.set; break;
-												case "insert":	sql.ds = [ctx.set]; break;
-											}
 
-										}, () => {  // locked
-											//res( rec );
+										case "clone":
+										case "trace":
+											return;
+
+										case "all":
+										default:
+											return sql.runQuery( ctx, null, (err,recs) => {
+												req(recs, me);
+											});				
+									}
+									break;
+
+								case Array:		// insert
+									ctx.crud = "insert";
+									req.forEach( rec => {
+										ctx.set = rec;
+										sql.runQuery( ctx, null, (err,info) => {
+											ctx.err = err;
 										});
-										break;
-								}
+									});	
+									break;
+
+								case Object:		// update
+									ctx.crud = "update";
+									ctx.set = req;
+									if ( query.ID ) 
+										sql.runQuery( ctx, null, (err,info) => {
+											ctx.err = err;
+										});
+									break;
+
+								case Number:  // delete
+									if ( query.ID ) {
+										ctx.crud = "delete";
+										sql.runQuery( ctx, null, (err,info) => {
+											ctx.err = err;
+										});
+									}
+									break;
+
+								case String:		// locking / unlocking
+									sql.relock( () => {  // unlocked
+										switch (req) {
+											case "select": break;
+											case "delete": 	sql.ds = null; break;
+											case "update":	sql.ds = ctx.set; break;
+											case "insert":	sql.ds = [ctx.set]; break;
+										}
+
+									}, () => {  // locked
+										//res( rec );
+									});
+									break;
 							}
 						}
-					}); 
-					
-					var 
-						attrs = JSDB.attrs,
-						dsFrom = "app",
-						dsKey = "Tables_in_" + dsFrom;
+					}
+				}); 
 
-					sql.query(`SHOW TABLES FROM ${dsFrom}`, (err,recs) => {
-						recs.forEach( rec => {
-							sql.getSearchables( ds = dsFrom + "." + rec[dsKey], keys => {
-								var attr = attrs[ds] = {};
-								for (var key in attrs.default) attr[key] = attrs.default[key];
-								attr.search = keys.join(",");
-							});
+				var 
+					attrs = DB.attrs,
+					dsFrom = "app",
+					dsKey = "Tables_in_" + dsFrom;
+
+				sql.query(`SHOW TABLES FROM ${dsFrom}`, (err,recs) => {
+					recs.forEach( rec => {
+						sql.getSearchables( ds = dsFrom + "." + rec[dsKey], keys => {
+							var attr = attrs[ds] = {};
+							for (var key in attrs.default) attr[key] = attrs.default[key];
+							attr.search = keys.join(",");
 						});
-
-						sql.release();
-
-						if (cb) cb(null);						
 					});
-					
+
+					sql.release();
+
+					if (cb) cb(null);						
 				});
-				
-			}
-			
-			else
-				cb( new JSDB.errors.noDB );
-			
-			return JSDB;
-		},
-		
-		msql: null,  //< reserved for mysql connector
-		
-		//emitter: null,  //< reserved for socketio emitter
-			
-		thread: sqlThread,
-		forEach: sqlEach,
-		forAll: sqlAll,
-		forFirst: sqlFirst,
-		context: sqlContext
+
+			});
+		}
+
+		else 
+		if (cb)
+			cb( new DB.errors.noDB );
+
+		return DB;
 	};
+	
+Copy({
+	queues: { 	//< reserve for job queues
+	},
+
+	reroute: {  //< default table -> db.table translators to protect or reroute tables
+	},
+
+	errors: {		//< errors messages
+		noConnect: new Error("sql pool exhausted or undefined"),
+		nillUpdate: new Error("nill update query"),
+		unsafeQuery: new Error("unsafe queries not allowed"),
+		unsupportedQuery: new Error("query not supported"),
+		invalidQuery: new Error("query invalid"),
+		noTable: new Error("dataset definition missing table name"),
+		noDB: new Error("no database connected"),
+		noLock: new Error("record lock ID missing"),
+		isUnlocked: new Error("record never locked"),
+		failLock: new Error("record locking failed"),
+		isLocked: new Error("record already locked"),
+		noExe: new Error("record execute undefined"),
+		noRecord: new Error("no record found")
+	},
+
+	fetcher: null, //() => Trace("data fetcher not configured"), //< data fetcher
+
+	attrs: {		//< reserved for dataset attributes derived during config
+		default:	{ 					// default dataset attributes
+			sql: null, // sql connector
+			query: "",  // sql query
+			opts: null,	// ?-options to sql query
+			unsafeok: true,  // allow/disallow unsafe queries
+			trace: false,   // trace ?-compressed sql queries
+			journal: true,	// attempt journally of updates to jou.table database
+			ag: "", 		// default aggregator "" implies "least(?,1)"
+			index: {select:"*"}, 	// data search and index
+			client: "guest", 		// default client 
+			track: false, 		// change journal tracking
+			search: ""  // key,key, .... fulltext keys to search
+		}		
+	},
+
+	mysql: null,  //< reserved for mysql connector
+
+	//emitter: null,  //< reserved for socketio emitter
+
+	thread: sqlThread,
+	forEach: sqlEach,
+	forAll: sqlAll,
+	forFirst: sqlFirst,
+	context: sqlContext
+}, DB);
 
 //============ key access
 
@@ -336,7 +330,7 @@ function getTables(db, cb) {
 	});
 }
 
-function context(ctx,cb) {  // callback cb(dsctx) with a JSDB context
+function context(ctx,cb) {  // callback cb(dsctx) with a DB context
 	var 
 		sql = this,
 		dsctx = {};
@@ -358,7 +352,7 @@ then the cb callback in not made.
 */
 	var 
 		sql = this,
-		fetcher = JSDB.fetcher,
+		fetcher = DB.fetcher,
 		defRec = {ID:0};
 	
 	if ( opts.key )
@@ -482,9 +476,9 @@ function updateJob(req, cb) {
 					Notes: ack}, req.inc, {ID:job.ID}]);
 			
 			if (req.qos) {  // move req to another qos queue
-				delete JSDB.queues[job.qos].batch[job.ID];
+				delete DB.queues[job.qos].batch[job.ID];
 				job.qos = req.qos;
-				JSDB.queues[qos].batch[job.ID] = job;
+				DB.queues[qos].batch[job.ID] = job;
 			}
 			
 			if (req.pid)
@@ -513,7 +507,7 @@ function deleteJob(req, cb) {
 				QoS:job.qos  // [secs]
 			});
 
-			delete JSDB.queues[job.qos].batch[job.priority];
+			delete DB.queues[job.qos].batch[job.priority];
 			
 			if (job.pid) CP.exec("kill "+job.pid); 	// kill a spawned req
 		});
@@ -545,10 +539,10 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 	
 	function regulate(job,cb) {		// regulate job (spawn if job.cmd provided)
 			
-		var queue = JSDB.queues[job.qos];	// get job's qos queue
+		var queue = DB.queues[job.qos];	// get job's qos queue
 		
 		if (!queue)  // prime the queue if it does not yet exist
-			queue = JSDB.queues[job.qos] = new Object({
+			queue = DB.queues[job.qos] = new Object({
 				timer: 0,
 				batch: {},
 				rate: job.qos,  // [secs]
@@ -687,7 +681,7 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 function executeJob(req, exe) {
 
 	function flip(job) {  // flip job holding state
-		if ( queue = JSDB.queues[job.qos] ) 	// get job's qos queue
+		if ( queue = DB.queues[job.qos] ) 	// get job's qos queue
 			if ( batch = queue.batch[job.priority] )  // get job's priority batch
 				batch.forEach( test => {  // matched jobs placed into holding state
 					if ( test.task==job.task && test.client==job.client && test.class==job.class )
@@ -851,7 +845,7 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 	function dummyConnector() {
 		var
 			This = this,
-			err = JSDB.errors.noDB;
+			err = DB.errors.noDB;
 
 		this.query = function (q,args,cb) {
 			Trace("NODB "+q);
@@ -879,11 +873,11 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		};
 	}
 
-	if ( mysql = JSDB.mysql ) 
+	if ( mysql = DB.mysql ) 
 		if ( mysql.pool ) 
 			mysql.pool.getConnection( (err,sql) => {
 				if (err) 
-					Log(JSDB.errors.noConnect, {
+					Log(DB.errors.noConnect, {
 						sqlpool: err,
 						total: mysql.pool._allConnections.length ,
 						free: mysql.pool._freeConnections.length,
@@ -899,10 +893,10 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 			cb( sql );
 
 		else
-			Log(JSDB.errors.noConnect);
+			Log(DB.errors.noConnect);
 	
 	else 
-		Log(JSDB.errors.noConnect);
+		Log(DB.errors.noConnect);
 }
 
 function sqlEach(trace, query, args, cb) {
@@ -1177,7 +1171,7 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 			lockID, (err,info) => {
 
 			if (err)
-				ctx.err = JSDB.errors.failLock;
+				ctx.err = DB.errors.failLock;
 
 			else
 			if (info.affectedRows) {  // unlocked so commit queued queries
@@ -1192,7 +1186,7 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 					lockID, (err,info) => {
 
 					if (err)
-						ctx.err = JSDB.errors.isLocked;
+						ctx.err = DB.errors.isLocked;
 
 					else
 						sql.query( "START TRANSACTION", err => {  // queue this transaction
@@ -1201,12 +1195,12 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 				});	
 
 			else  // record was never locked
-				ctx.err = JSDB.errors.isUnlocked;
+				ctx.err = DB.errors.isUnlocked;
 
 		});
 
 	else
-		ctx.err = JSDB.errors.noLock;
+		ctx.err = DB.errors.noLock;
 }
 
 //================ url query expressions 
@@ -1258,7 +1252,7 @@ function serialize( qs, opts, ctx, cb ) {
 */
 	var 
 		sql = this,
-		fetcher = JSDB.fetcher,
+		fetcher = DB.fetcher,
 		qlist = [],
 		fetchRecs = function (rec, cb) {
 			var
@@ -1309,7 +1303,7 @@ function serialize( qs, opts, ctx, cb ) {
 
 function reroute( ds , ctx ) {  //< route ds=table||db_table to a protector 
 	var 
-		routes = JSDB.reroute,
+		routes = DB.reroute,
 		[x,db,table] = ds.match(/(.*)_(.*)/) || [ "", "app", ds ],
 		ds = db + "." + table,
 		ds = ctx ? routes[ds] || ds : routes[ds] || ( routes[db] || db) + "." + (routes[table] || table );
@@ -1326,11 +1320,11 @@ function serialize( msg, query, args, cb ) {
 }  */
 
 function Trace(msg,sql) {	//< execution tracing
-	TRACE.trace(msg,sql);
+	"B>".trace(msg,sql);
 }
 
 /**
-@class JSDB.Unit_Tests_Use_Cases
+@class DB.Unit_Tests_Use_Cases
 */
 
 switch ( process.argv[2] ) { //< unit tests

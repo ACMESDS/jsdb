@@ -82,7 +82,7 @@ was configured), and will journal the change when jounalling is enabled.
 
 JSDB is configured and started like this:
 
-	var JSDB = require("jsdb").config({ 
+	var JSDB = require("jsdb")({ 
 	
 		dbtx: {		// table translator
 			X: "DB.Y", ...
@@ -104,7 +104,7 @@ the [ENUM deep copy conventions](https://github.com/acmesds/enum).
 
 ### Create dataset on a new sql thread
 
-	JSDB.thread( (sql) => {
+	JSDB.thread( sql => {
 	
 		var ds = new JSDB.DS(sql,{
 			table:"test.x", 
