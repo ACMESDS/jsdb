@@ -199,7 +199,7 @@ Copy({
 	queues: { 	//< reserve for job queues
 	},
 
-	reroute: {  //< default table -> db.table translators to protect or reroute tables
+	reroute: {  //< db.table -> db.table translators to protect or reroute tables
 	},
 
 	errors: {		//< errors messages
