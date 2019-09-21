@@ -22,8 +22,6 @@ JSDB provides a JS-agnosticator to a (default MySQL-Cluster) database:
 where dsN are datasets, sql in a MySQL connector, and dataset ATTRIBUTES = {key:value, ... } are 
 described below.  Alternatively, a lone dataset can be created thusly:
 
-	var JSDB = require("jsdb");
-	
 	JSDB.thread( function (sql) {
 		var ds = new JSDB.DS(sql, ATTRIBUTES);
 	})
@@ -82,7 +80,9 @@ was configured), and will journal the change when jounalling is enabled.
 
 JSDB is configured and started like this:
 
-	var JSDB = require("jsdb")({ 
+	var JSDB = require("jsdb");
+	
+	JSDB.config({ 
 	
 		dbtx: {		// table translator
 			X: "DB.Y", ...

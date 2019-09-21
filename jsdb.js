@@ -16,8 +16,8 @@ var
 
 const { Copy,Each,Log,isFunction,isString,isArray } = require("enum");
 
-var
-	DB = module.exports = (opts,cb) => {  // callback cb(sql connection)
+var DB = module.exports = {
+	config: (opts,cb) => {  // callback cb(sql connection)
 		if (opts) Copy(opts,DB,".");
 
 		//Trace("CONFIG DB");
@@ -191,11 +191,8 @@ var
 		else 
 		if (cb)
 			cb( new DB.errors.noDB );
-
-		return DB;
-	};
+	},
 	
-Copy({
 	queues: { 	//< reserve for job queues
 	},
 
@@ -245,8 +242,8 @@ Copy({
 	forAll: sqlAll,
 	forFirst: sqlFirst,
 	context: sqlContext
-}, DB);
-
+};
+	
 //============ key access
 
 function getKeys(table, type, keys, cb) {
