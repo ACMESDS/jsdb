@@ -228,7 +228,7 @@ var DB = module.exports = {
 			ag: "", 		// default aggregator "" implies "least(?,1)"
 			index: {select:"*"}, 	// data search and index
 			client: "guest", 		// default client 
-			track: false, 		// change journal tracking
+			//track: false, 		// change journal tracking
 			search: ""  // key,key, .... fulltext keys to search
 		}		
 	},
@@ -1068,6 +1068,7 @@ function runQuery(ctx, emitter, cb) {
 				else
 					ex = "#UPDATE NO WHERE";
 
+				Log(ex);
 				break;
 
 			case "delete":
@@ -1084,7 +1085,7 @@ function runQuery(ctx, emitter, cb) {
 			case "insert":
 				ex += sql.format("INSERT INTO ??" , from);
 
-				if ( set = sql.toQuery(opts.set) ) {
+				if ( set = opts.set ) {
 					delete set.ID;
 					delete set.id;
 					ex += sql.format(" SET ?", set);
@@ -1102,7 +1103,7 @@ function runQuery(ctx, emitter, cb) {
 	}
 	
 	if ( ex = buildQuery(this, ctx) ) 
-		if ( ctx.lock ) {
+		if ( ctx.lock ) {		// process form lock/unlock queries
 			sql.ctx = ctx;
 			sql.relock( function () {  // sucessfully unlocked
 				switch (ctx.crud) {
@@ -1118,11 +1119,11 @@ function runQuery(ctx, emitter, cb) {
 			});
 		}
 
-		else
-			this.query( ex, [], function (err, info) {
+		else	// process standard queries
+			this.query( ex, [], (err, info) => {
 
 				cb( err, info );
-
+				
 				if ( emitter && !err && ctx.client ) { // Notify other clients of change
 					//Log("emitting", ctx);
 					emitter( ctx.crud, {
@@ -1299,13 +1300,16 @@ function serialize( qs, opts, ctx, cb ) {
 }
 
 function reroute( ds , ctx ) {  //< route ds=table||db_table to a protector 
-	var 
-		routes = DB.reroute,
-		[x,db,table] = ds.match(/(.*)_(.*)/) || [ "", "app", ds ],
-		ds = db + "." + table,
-		ds = ctx ? routes[ds] || ds : routes[ds] || ( routes[db] || db) + "." + (routes[table] || table );
-			
-	return ( typeof ds == "function" ) ? ds(ctx) : ds;
+	//var 
+		//routes = DB.reroute,
+		//[x,db,table] = ds.match(/(.*)_(.*)/) || [ "", "app", ds ],
+		//ds = db + "." + table;
+	
+	if ( route = DB.reroute[ds] )
+		return route(ctx || {} );
+	
+	else
+		return "app."+ds;
 }
 
 /*
