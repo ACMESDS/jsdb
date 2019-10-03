@@ -14,7 +14,7 @@ var
 	// 3rd party bindings
 	MYSQL = require("mysql");
 
-const { Copy,Each,Log,isFunction,isString,isArray } = require("enum");
+const { Copy,Each,Log,isFunction,isString,isArray,isEmpty } = require("enum");
 
 var DB = module.exports = {
 	config: (opts,cb) => {  // callback cb(sql connection)
@@ -1085,14 +1085,13 @@ function runQuery(ctx, emitter, cb) {
 			case "insert":
 				ex += sql.format("INSERT INTO ??" , from);
 
-				if ( set = opts.set ) {
-					delete set.ID;
-					delete set.id;
-					ex += sql.format(" SET ?", set);
-				}
-
-				else
+				var set = opts.set || {};
+				delete set.ID;
+				delete set.id;
+				if ( isEmpty(set) ) 
 					ex += sql.format(" () values ()", []);
+				else
+					ex += sql.format(" SET ?", set);
 
 				break;
 		}
