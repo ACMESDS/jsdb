@@ -439,7 +439,7 @@ function selectJob(where, cb) {
 		? `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client WHERE ${where} ORDER BY QoS,Priority`
 		: `SELECT *,profiles.* FROM queues LEFT JOIN profiles ON queues.Client=profiles.Client ORDER BY QoS,Priority`
 	)
-	.on("error", function (err) {
+	.on("error", err => {
 		Log(err);
 	})
 	.on("result", rec => {
@@ -688,7 +688,7 @@ function executeJob(req, exe) {
 	
 	var sql = req.sql, query = req.query;
 	
-	sql.query("UPDATE ??.queues SET Holding = NOT Holding WHERE ?", {ID: query.ID}, function (err) {
+	sql.query("UPDATE ??.queues SET Holding = NOT Holding WHERE ?", {ID: query.ID}, err => {
 		
 		if ( !err )
 			flip();
@@ -1068,7 +1068,6 @@ function runQuery(ctx, emitter, cb) {
 				else
 					ex = "#UPDATE NO WHERE";
 
-				Log(ex);
 				break;
 
 			case "delete":
@@ -1147,7 +1146,7 @@ function hawk(log) {  // journal changes
 				Hawk: hawk.Hawk,  	// moderator
 				Power: hawk.Power, 	// moderator's level
 				Updates: 1 					// init number of updates made
-			}, log), function (err) {
+			}, log), err => {
 				Log("journal", err);
 		});
 	});
