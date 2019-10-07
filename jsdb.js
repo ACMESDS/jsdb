@@ -276,25 +276,6 @@ function getFields(table, where, keys, cb) {
 	});
 }
 
-/*
-function getFields(table, where, keys, cb) {
-	this.query( 
-		where 
-			? `SHOW FULL FIELDS FROM ${table} WHERE least(?,1)`
-			: `SHOW FULL FIELDS FROM ${table} `, 
-		
-		where, (err, recs) => {
-			//Log(table, err);
-			if (!err)
-				recs.forEach( (rec,n) => {
-					keys.push(rec.Field);
-				});
-			
-			if (cb) cb(keys);
-	});
-}
-*/
-
 function getJsons(table, cb) {
 	this.getFields(table, {Type:"json"}, [], cb);
 }
@@ -1095,7 +1076,7 @@ function runQuery(ctx, emitter, cb) {
 				break;
 		}
 
-		if (true || opts.trace) Log(ex);
+		if (opts.trace) Trace(ex);
 		
 		return ex;
 	}
