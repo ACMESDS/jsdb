@@ -215,7 +215,7 @@ var DB = module.exports = {
 		noRecord: new Error("no record found")
 	},
 
-	fetcher: null, //() => Trace("data fetcher not configured"), //< data fetcher
+	probeSite: (url,opt) => { throw new Error("data probeSite not configured"); }, //< data probeSite
 
 	attrs: {		//< reserved for dataset attributes derived during config
 		default:	{ 					// default dataset attributes
@@ -324,13 +324,13 @@ function context(ctx,cb) {  // callback cb(dsctx) with a DB context
 function cache( opts, cb ) {
 /*
 Implements generic cache.  Looks for cache given opts.key and, if found, returns cached results on cb(results);
-otherwse, if not found, returns results via opts.make(fetcher, opts.parms, cb).  If cacheing fails, then opts.default 
+otherwse, if not found, returns results via opts.make(probeSite, opts.parms, cb).  If cacheing fails, then opts.default 
 is returned.  The returned results will always contain a results.ID for its cached ID.  If a opts.default is not provided,
 then the cb callback in not made.
 */
 	var 
 		sql = this,
-		fetcher = DB.fetcher,
+		probeSite = DB.probeSite,
 		defRec = {ID:0};
 	
 	if ( opts.key )
@@ -349,16 +349,16 @@ then the cb callback in not made.
 				}
 
 			else
-			if ( opts.make && opts.parms ) 
-				if (fetcher)
-					opts.make( fetcher, opts.parms, function (res) {
+			if ( opts.make ) 
+				if (probeSite)
+					opts.make( probeSite.tag(opts.parms || {}), ctx => {
 
-					if (res) 
+					if (ctx) 
 						sql.query( 
 							"INSERT INTO app.cache SET Added=now(), Results=?, ?", 
-							[ JSON.stringify(res || opts.default), opts.key ], 
+							[ JSON.stringify(ctx || opts.default), opts.key ], 
 							function (err, info) {
-								cb( Copy(res, {ID: err ? 0 : info.insertId}) );
+								cb( Copy(ctx, {ID: err ? 0 : info.insertId}) );
 						});
 
 					else 
@@ -1229,7 +1229,6 @@ function serialize( qs, opts, ctx, cb ) {
 */
 	var 
 		sql = this,
-		fetcher = DB.fetcher,
 		qlist = [],
 		fetchRecs = function (rec, cb) {
 			var
@@ -1237,10 +1236,10 @@ function serialize( qs, opts, ctx, cb ) {
 				query = rec.query;
 			
 			if ( query.startsWith("/") ) // requesting http fetch
-				if ( fetcher )
-					fetcher( query, null, info => cb( info.parseJSON() ) );
+				if ( probeSite = DB.probeSite )
+					probeSite( query, info => cb( info.parseJSON() ) );
 
-				else  // fetcher disabled / unconfigured
+				else  // probeSite disabled / unconfigured
 					cb( null );
 
 			else   // requesting internal db
@@ -1299,8 +1298,8 @@ function serialize( msg, query, args, cb ) {
 	});
 }  */
 
-function Trace(msg,sql) {	//< execution tracing
-	"B>".trace(msg,sql);
+function Trace(msg,req,fwd) {	//< execution tracing
+	"B>".trace(msg,req,fwd);
 }
 
 /**
