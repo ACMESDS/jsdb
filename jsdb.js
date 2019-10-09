@@ -14,6 +14,10 @@ var
 	// 3rd party bindings
 	MYSQL = require("mysql");
 
+function Trace(msg,req,fwd) {	//< execution tracing
+	"db".trace(msg,req,fwd);
+}
+
 const { Copy,Each,Log,isFunction,isString,isArray,isEmpty } = require("enum");
 
 var DB = module.exports = {
@@ -1297,10 +1301,6 @@ function serialize( msg, query, args, cb ) {
 		cb(null);	// signal end
 	});
 }  */
-
-function Trace(msg,req,fwd) {	//< execution tracing
-	"B>".trace(msg,req,fwd);
-}
 
 /**
 @class DB.Unit_Tests_Use_Cases
