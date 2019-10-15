@@ -184,8 +184,6 @@ var DB = module.exports = {
 						});
 					});
 
-					sql.release();
-
 					if (cb) cb(null);						
 				});
 
@@ -643,7 +641,6 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 							{Client: job.client} 
 						);
 						
-						sql.release();
 						/*
 						sql.query(  // mark job departed if no work remains
 							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
@@ -859,34 +856,39 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		if ( mysql.pool ) 
 			mysql.pool.getConnection( (err,sql) => {
 				if (err) 
-					Log(DB.errors.noConnect, {
-						sqlpool: err,
+					Log( DB.errors.noConnect, {
+						error: err,
 						total: mysql.pool._allConnections.length ,
 						free: mysql.pool._freeConnections.length,
-						queue: mysql.pool._connectionQueue.length
+						queue: mysql.pool._connectionQueue.length,
+						config: mysql
 					});
 
-				else 
+				else {
 					cb( sql );
+					sql.release();
+				}
 			});
 
 		else
-		if ( sql = MYSQL.createConnection(mysql.opts) ) 
+		if ( sql = MYSQL.createConnection(mysql.opts) ) {
 			cb( sql );
+			sql.release();
+		}
 
 		else
 			Log(DB.errors.noConnect);
 	
 	else 
-		Log(DB.errors.noConnect);
+		cb( dummyConnection );
 }
 
 function sqlEach(trace, query, args, cb) {
 	sqlThread( sql => {
 		sql.forEach( trace, query, args, rec => {
 			cb(rec, sql);
-		})
-		.on("end", err => sql.release() );
+		});
+		//.on("end", err => sql.release() );
 	});
 }
 
@@ -894,7 +896,6 @@ function sqlAll(trace, query, args, cb) {
 	sqlThread( sql => {
 		sql.forAll( trace, query, args, recs => {
 			cb(recs, sql);
-			sql.release();
 		});
 	});
 }
@@ -903,7 +904,6 @@ function sqlFirst(trace, query, args, cb) {
 	sqlThread( sql => {
 		sql.forFirst(trace, query, args, rec => {
 			cb(rec, sql);
-			sql.release();
 		});
 	});
 }
@@ -912,7 +912,6 @@ function sqlContext(ctx, cb) {
 	sqlThread( sql => {
 		sql.context( ctx, function (dsctx) {
 			cb(dsctx, sql);
-			sql.release();
 		});
 	});
 }
