@@ -763,30 +763,6 @@ function flattenCatalog(flags, catalog, limits, cb) {
 
 //================= record enumerators
 
-/*
-function thenDo(cb) {
-	var sql = this;
-	this.q.on("end", function () {
-		if (cb) cb(sql);
-	});
-	return this;
-}
-
-function onEnd(cb) {  // on-end callback cb() and release connection
-	var sql = this;
-	this.q.on("end", function () {
-		if (cb) cb(sql);
-		sql.release();
-	});
-	return this;
-}
-
-function onError(cb) {  // on-error callback cb(err) and release connection
-	var sql = this;
-	this.q.on("error", cb);
-	return this;
-} */
-
 function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
 	var q = this.query( query || "#ignore", args, (err,recs) => {  
 		if ( err ) 
@@ -873,7 +849,7 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		else
 		if ( sql = MYSQL.createConnection(mysql.opts) ) {
 			cb( sql );
-			sql.release();
+			//sql.release();
 		}
 
 		else
@@ -888,7 +864,6 @@ function sqlEach(trace, query, args, cb) {
 		sql.forEach( trace, query, args, rec => {
 			cb(rec, sql);
 		});
-		//.on("end", err => sql.release() );
 	});
 }
 
