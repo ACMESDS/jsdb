@@ -640,7 +640,6 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 							"UPDATE openv.profiles SET Charge=Charge+1,Credit=Credit-1 WHERE ?", 
 							{Client: job.client} 
 						);
-						
 						/*
 						sql.query(  // mark job departed if no work remains
 							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
@@ -856,7 +855,7 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 			Log(DB.errors.noConnect);
 	
 	else 
-		cb( dummyConnection );
+		cb( dummyConnector );
 }
 
 function sqlEach(trace, query, args, cb) {
