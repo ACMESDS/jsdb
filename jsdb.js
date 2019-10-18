@@ -872,7 +872,7 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		else
 		if ( sql = MYSQL.createConnection(mysql.opts) ) {
 			cb( sql );
-			sql.release();
+			//sql.release();
 		}
 
 		else
