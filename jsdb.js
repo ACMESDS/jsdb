@@ -628,9 +628,9 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 			
 			if (job.credit)				// client still has credit so place it in the regulators
 				regulate( Copy(job,{}) , job => { // clone job and provide a callback when job departs
-					cb( job );
+					sqlThread( sql => {  // start new sql thread to run job and save metrics
+						cb( sql, job );
 
-					sqlThread( sql => {  // start new sql thread to save metrics
 						sql.query( // reduce work backlog 
 							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", 
 							{ID: job.ID} 
