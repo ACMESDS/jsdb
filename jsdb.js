@@ -505,79 +505,64 @@ callback cb(job) or spawn a new process if job.cmd provided.  The job is regulat
 (0 disables regulation). If the client's job.credit has been exhausted, the job is added to the queue, 
 but not to the regulator.  Queues are periodically monitored to store billing information.  
  */
-	function cpuavgutil() {				// compute average cpu utilization
-		var avgUtil = 0;
-		var cpus = OS.cpus();
-		
-		cpus.forEach( cpu => {
-			idle = cpu.times.idle;
-			busy = cpu.times.nice + cpu.times.sys + cpu.times.irq + cpu.times.user;
-			avgUtil += busy / (busy + idle);
-		});
-		return avgUtil / cpus.length;
-	}
-	
 	function regulate(job,cb) {		// regulate job (spawn if job.cmd provided)
 			
 		var queue = DB.queues[job.qos];	// get job's qos queue
 		
-		if (!queue)  // prime the queue if it does not yet exist
-			queue = DB.queues[job.qos] = new Object({
-				timer: 0,
-				batch: {},
-				rate: job.qos,  // [secs]
-				client: {}
+		if ( !queue )  // prime the queue if it does not yet exist
+			queue = DB.queues[job.qos] = new Object({	// reserve queue for requested qos polling level
+				timer: 0,	// reserved for setInterval
+				batch: {},	// each batch reserved for different priorities
+				rate: job.qos,  // in seconds
+				client: {}	// reserved for client billing information
 			});
 			
-		var client = queue.client[job.client];  // update client's bill
+		// update client's bill (default client = "guest")
 		
-		if ( !client) client = queue.client[job.client] = new Object({bill:0});
+		var client = queue.client[job.client || "guest"]; 
 		
-		client.bill++;
-
-		var batch = queue.batch[job.priority]; 		// get job's priority batch
+		if ( !client ) client = queue.client[job.client || "guest"] = new Object({count:1, limit: job.limit || 1 });
 		
-		if (!batch) 
-			batch = queue.batch[job.priority] = new Array();
+		// access priority batch for this job 
+		
+		var batch = queue.batch[job.priority || 0]; 		// get job's priority batch (default priority = 0)
+		
+		if ( !batch ) 
+			batch = queue.batch[job.priority || 0] = new Array();
 
 		batch.push( Copy(job, {cb:cb, holding: false}) );  // add job to queue
 		
 		if ( !queue.timer ) 		// restart idle queue
-			queue.timer = setInterval(function (queue) {  // setup periodic poll for this job queue
+			queue.timer = setInterval( queue => {  // setup periodic poll for this job queue
 
 				var job = null;
 				for (var priority in queue.batch) {  // index thru all priority batches
 					var batch = queue.batch[priority];
 
-					job = batch.pop(); 			// last-in first-out
-
-					if (job) {  // there is a departing job 
+					if ( job = batch.pop() ) {  // there is a departing job (last-in first-out )
 //Log("job depth="+batch.length+" job="+[job.name,job.qos]);
 
-						if (job.holding)  // in holding / stopped state so requeue it
+						var client = queue.client[ job.client || "guest" ];
+						
+						if ( client.count < client.limit )  {	// it can stay in the queue so
 							batch.push(job);
-									   
-						else
-						if (job.cmd) {	// this is a spawned job so spawn and hold its pid
-							job.pid = CP.exec(
-									job.cmd, 
-									  {cwd: "./public/dets", env:process.env}, 
-									  function (err,stdout,stderr) {
-
-								job.err = err || stderr || stdout;
-
-								if (job.cb) job.cb( job );  // execute job's callback
-							});
+							client.count++;
 						}
-					
-						else  			// execute job's callback
-						if (job.cb) job.cb(job);
 
-						break;
+						if ( jobcb = job.cb )	// has a callback so
+							if ( isString(jobcb) )  // this is a child job so spawn it and hold its pid
+								job.pid = CP.exec( jobcb, {cwd: "./public", env:process.env}, (err,stdout,stderr) => {
+									job.err = err || stderr || stdout;
+								});
+						
+							else  // execute job's callback
+								jobcb(job);
+
+						//break;	// exit priority loop
 					}
 				}
 
-				if ( !job ) { 	// an empty queue goes idle
+				if ( !job ) { // queue empty so it goes idle
 					clearInterval(queue.timer);
 					queue.timer = null;
 				}
@@ -593,7 +578,7 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 			"INSERT INTO app.queues SET ? ON DUPLICATE KEY UPDATE " +
 			"Departed=null, Work=Work+1, State=Done/Work*100, Age=(now()-Arrived)/3600e3, ?", [{
 				// mysql unique keys should not be null
-				Client: job.client || "",
+				Client: job.client || "guest",
 				Class: job.class || "",
 				Task: job.task || "",
 				QoS: job.qos || 0,  // [secs]
@@ -605,7 +590,6 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 				Name: job.name,
 				Age: 0,
 				Classif : "",
-				//Util: cpuavgutil(),
 				Priority: job.priority || 0,
 				Notes: job.notes,
 				Finished: 0,
@@ -626,7 +610,7 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 			
 			job.ID = info.insertId || 0;
 			
-			if (job.credit)				// client still has credit so place it in the regulators
+			if ( job.credit )				// client still has credit so place it in the regulator
 				regulate( Copy(job,{}) , job => { // clone job and provide a callback when job departs
 					sqlThread( sql => {  // start new sql thread to run job and save metrics
 						cb( sql, job );
@@ -640,12 +624,6 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 							"UPDATE openv.profiles SET Charge=Charge+1,Credit=Credit-1 WHERE ?", 
 							{Client: job.client} 
 						);
-						/*
-						sql.query(  // mark job departed if no work remains
-							"UPDATE app.queues SET Departed=now(), Notes='finished', Finished=1 WHERE least(?,Done=Work)", 
-							{ID:job.ID} //jobID
-						);
-						*/
 					});
 				});
 		});
