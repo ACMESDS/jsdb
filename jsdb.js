@@ -18,7 +18,7 @@ function Trace(msg,req,fwd) {	//< execution tracing
 	"db".trace(msg,req,fwd);
 }
 
-const { Copy,Each,Log,isFunction,isString,isArray,isEmpty } = require("enum");
+const { Copy,Each,Log,isFunction,isString,isArray,isEmpty,isDate } = require("enum");
 
 var DB = module.exports = {
 	config: (opts,cb) => {  // callback cb(sql connection)
@@ -521,7 +521,7 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 		
 		var client = queue.client[job.client || "guest"]; 
 		
-		if ( !client ) client = queue.client[job.client || "guest"] = new Object({count:1, limit: job.limit || 1 });
+		if ( !client ) client = queue.client[job.client || "guest"] = new Object({count:1, until: job.until || 1, start: job.start, end: job.end });
 		
 		// access priority batch for this job 
 		
@@ -530,7 +530,7 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 		if ( !batch ) 
 			batch = queue.batch[job.priority || 0] = new Array();
 
-		batch.push( Copy(job, {cb:cb, holding: false}) );  // add job to queue
+		batch.push( Copy(job, {cb:cb}) );  // add job to queue
 		
 		if ( !queue.timer ) 		// restart idle queue
 			queue.timer = setInterval( queue => {  // setup periodic poll for this job queue
@@ -539,26 +539,35 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 				for (var priority in queue.batch) {  // index thru all priority batches
 					var batch = queue.batch[priority];
 
-					if ( job = batch.pop() ) {  // there is a departing job (last-in first-out )
+					if ( job = batch.pop() ) {  // remove job from the queue (last-in first-out )
 //Log("job depth="+batch.length+" job="+[job.name,job.qos]);
 
-						var client = queue.client[ job.client || "guest" ];
+						var 
+							now = new Date(),
+							client = queue.client[ job.client || "guest" ],
+							start = client.start || now,
+							end = client.end || now;
 						
-						if ( client.count < client.limit )  {	// it can stay in the queue so
-							batch.push(job);
-							client.count++;
+						if ( now >= start && now <= end ) {	// within run window
+							if ( client.count < client.until )  {	// can run more times so put it back on the queue
+								batch.push(job);
+								client.count++;
+							}
+
+							if ( jobcb = job.cb )	// has a callback so run it
+								if ( isString(jobcb) )  // this is a child job so spawn it and hold its pid
+									job.pid = CP.exec( jobcb, {cwd: "./public", env:process.env}, (err,stdout,stderr) => {
+										job.err = err || stderr || stdout;
+									});
+
+								else  // execute job's callback
+									jobcb(job);
 						}
-
-						if ( jobcb = job.cb )	// has a callback so
-							if ( isString(jobcb) )  // this is a child job so spawn it and hold its pid
-								job.pid = CP.exec( jobcb, {cwd: "./public", env:process.env}, (err,stdout,stderr) => {
-									job.err = err || stderr || stdout;
-								});
 						
-							else  // execute job's callback
-								jobcb(job);
-
-						//break;	// exit priority loop
+						else
+						if ( now < start )  // cant start yet so put it back on the queue
+							batch.push(job);
+						
 					}
 				}
 
