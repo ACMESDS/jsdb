@@ -521,8 +521,9 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 		
 		var client = queue.client[job.client || "guest"]; 
 		
-		if ( !client ) client = queue.client[job.client || "guest"] = new Object({count:1, until: job.until || 1, start: job.start, end: job.end });
+		if ( !client ) client = queue.client[job.client || "guest"] = new Object({count:1, until: job.until || 1, start: new Date( job.start || "1950") , end: new Date( job.end || "2050" ) });
 		
+		//Log(">>>>client", client);
 		// access priority batch for this job 
 		
 		var batch = queue.batch[job.priority || 0]; 		// get job's priority batch (default priority = 0)
@@ -544,11 +545,9 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 
 						var 
 							now = new Date(),
-							client = queue.client[ job.client || "guest" ],
-							start = client.start || now,
-							end = client.end || now;
+							client = queue.client[ job.client || "guest" ];
 						
-						if ( now >= start && now <= end ) {	// within run window
+						if ( now >= client.start && now <= client.end ) {	// within run window
 							if ( client.count < client.until )  {	// can run more times so put it back on the queue
 								batch.push(job);
 								client.count++;
@@ -565,7 +564,7 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 						}
 						
 						else
-						if ( now < start )  // cant start yet so put it back on the queue
+						if ( now < client.start )  // cant start yet so put it back on the queue
 							batch.push(job);
 						
 					}
