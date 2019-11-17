@@ -1039,7 +1039,7 @@ function runQuery(ctx, emitter, cb) {
 				break;
 		}
 
-		if (opts.trace) Trace(ex);
+		if (true || opts.trace) Trace(ex);
 		
 		return ex;
 	}
