@@ -26,9 +26,19 @@ var DB = module.exports = {
 
 		//Trace("CONFIG DB");
 
-		if (mysql = DB.mysql) {
-			mysql.pool = MYSQL.createPool(mysql.opts);
-
+		if (mysql = DB.mysql) {		// create pooled connection.
+			/*
+				mysql.connection = MYSQL.createConnection(mysql.opts);
+				mysql.connection.connect();
+				// nonpooled connector permits connection reuse within other queries, but they become responsible to release() the connection
+			*/
+			
+			var pool = mysql.pool = MYSQL.createPool(mysql.opts);
+			
+			// may be useful to test thread depth to protect against DOS attacks
+			pool.on("acquire", () => DB.threads ++ );
+			pool.on("release", () => DB.threads -- );
+			
 			sqlThread( sql => {
 
 				[						
@@ -237,6 +247,8 @@ var DB = module.exports = {
 
 	mysql: null,  //< reserved for mysql connector
 
+	threads: 0, 	// connection threads
+	
 	//emitter: null,  //< reserved for socketio emitter
 
 	thread: sqlThread,
@@ -781,39 +793,9 @@ function forAll(msg, query, args, cb) { // callback cb(recs) if no error
 }
 
 function sqlThread(cb) {  // callback cb(sql) with a sql connection
-
-	function dummyConnector() {
-		var
-			This = this,
-			err = DB.errors.noDB;
-
-		this.query = function (q,args,cb) {
-			Trace("NODB "+q);
-			if (cb)
-				cb(err);
-			else
-			if ( args && isFunction(args) )
-				args(err);
-
-			return This;
-		};
-
-		this.on = function (ev, cb) {
-			return This;
-		};
-
-		this.sql = "DUMMY SQL CONNECTOR";
-
-		this.release = function () {
-			return This;
-		};
-
-		this.createPool = function (opts) {
-			return null;
-		};
-	}
-
 	if ( mysql = DB.mysql ) 
+		cb(mysql.pool);
+		/*
 		if ( mysql.pool ) 
 			mysql.pool.getConnection( (err,sql) => {
 				if (err) 
@@ -830,18 +812,47 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 					sql.release();
 				}
 			});
-
+		
 		else
 		if ( sql = MYSQL.createConnection(mysql.opts) ) {
 			cb( sql );
 			//sql.release();
 		}
-
 		else
-			Log(DB.errors.noConnect);
-	
+			Log(DB.errors.noConnect);	
+		*/
+
 	else 
-		cb( dummyConnector );
+		cb( function dummyConnector() {
+			var
+				This = this,
+				err = DB.errors.noDB;
+
+			this.query = function (q,args,cb) {
+				Trace("NODB "+q);
+				if (cb)
+					cb(err);
+				else
+				if ( args && isFunction(args) )
+					args(err);
+
+				return This;
+			};
+
+			this.on = function (ev, cb) {
+				return This;
+			};
+
+			this.sql = "DUMMY SQL CONNECTOR";
+
+			this.release = function () {
+				return This;
+			};
+
+			this.createPool = function (opts) {
+				return null;
+			};
+		} );
 }
 
 function sqlEach(trace, query, args, cb) {
@@ -957,21 +968,21 @@ function runQuery(ctx, emitter, cb) {
 				}
 
 				if ( index = sql.toQuery(opts.index) )
-					ex += sql.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
+					ex += MYSQL.format("SELECT SQL_CALC_FOUND_ROWS ?", index);
 				
 				else
 					ex += "SELECT SQL_CALC_FOUND_ROWS *" ;
 
-				ex += sql.format(" FROM ??", from );
+				ex += MYSQL.format(" FROM ??", from );
 
 				if ( join = opts.join )
 					ex += " " + join + " ";
 
 				if ( where = sql.toQuery(opts.where) )
-					ex += sql.format(" WHERE least(?,1)", where );
+					ex += MYSQL.format(" WHERE least(?,1)", where );
 
 				if ( having = sql.toQuery(opts.having) )
-					ex += sql.format(" HAVING least(?,1)", having );
+					ex += MYSQL.format(" HAVING least(?,1)", having );
 
 				if ( sort = opts.sort ) 
 					try {
@@ -987,27 +998,27 @@ function runQuery(ctx, emitter, cb) {
 					}
 
 				if ( group = opts.group ) 
-					ex += sql.format(" GROUP BY " + escapeId( group.split(",") ));
+					ex += MYSQL.format(" GROUP BY " + escapeId( group.split(",") ));
 
 				if ( order = opts.order )
-					ex += sql.format(" ORDER BY " + escapeId( order.split(",") ));
+					ex += MYSQL.format(" ORDER BY " + escapeId( order.split(",") ));
 
 				if (limit = opts.limit)
-					ex += sql.format(" LIMIT ?", limit);
+					ex += MYSQL.format(" LIMIT ?", limit);
 
 				if (offset = opts.offset)
-					ex += sql.format(" OFFSET ?", offset);
+					ex += MYSQL.format(" OFFSET ?", offset);
 
 				break;
 
 			case "update":
-				ex += sql.format("UPDATE ??" , from);
+				ex += MYSQL.format("UPDATE ??" , from);
 
 				if ( set = opts.set )
-					ex += sql.format(" SET ?" , set);
+					ex += MYSQL.format(" SET ?" , set);
 
 				if ( where = sql.toQuery(opts.where) )
-					ex += sql.format(" WHERE least(?,1)", where);
+					ex += MYSQL.format(" WHERE least(?,1)", where);
 
 				else
 					ex = "#UPDATE NO WHERE";
@@ -1015,10 +1026,10 @@ function runQuery(ctx, emitter, cb) {
 				break;
 
 			case "delete":
-				ex += sql.format("DELETE FROM ??" , from);
+				ex += MYSQL.format("DELETE FROM ??" , from);
 
 				if ( where = sql.toQuery(opts.where) )
-					ex += sql.format(" WHERE least(?,1)", where);
+					ex += MYSQL.format(" WHERE least(?,1)", where);
 
 				else
 					ex = "#DELETE NO WHERE";
@@ -1026,15 +1037,15 @@ function runQuery(ctx, emitter, cb) {
 				break;
 
 			case "insert":
-				ex += sql.format("INSERT INTO ??" , from);
+				ex += MYSQL.format("INSERT INTO ??" , from);
 
 				var set = opts.set || {};
 				delete set.ID;
 				delete set.id;
 				if ( isEmpty(set) ) 
-					ex += sql.format(" () values ()", []);
+					ex += MYSQL.format(" () values ()", []);
 				else
-					ex += sql.format(" SET ?", set);
+					ex += MYSQL.format(" SET ?", set);
 
 				break;
 		}
