@@ -19,6 +19,7 @@ function Trace(msg,req,fwd) {	//< execution tracing
 }
 
 const { Copy,Each,Log,isFunction,isString,isArray,isEmpty,isDate } = require("enum");
+const { escape, escapeId } = MYSQL;
 
 var DB = module.exports = {
 	config: (opts,cb) => {  // callback cb(sql connection)
@@ -73,10 +74,12 @@ var DB = module.exports = {
 					hawk,
 					flattenCatalog,
 
+					/*
 					//escapeing,
 					function escape(arg) { return MYSQL.escape(arg); },
 					function escapeId(key) { return MYSQL.escapeId(key); }, 
-
+					*/
+					
 					// bulk insert records
 					beginBulk,
 					endBulk,
@@ -893,8 +896,6 @@ function runQuery(ctx, emitter, cb) {
 	
 	function buildQuery(sql,opts) {
 		var
-			escape = MYSQL.escape,
-			escapeId = MYSQL.escapeId,
 			ex = "",
 			from = reroute( opts.from, opts );
 
@@ -1170,8 +1171,6 @@ function QUERY(query) {
 [
 	function toSqlString() {	
 		var 
-			escape = MYSQL.escape,
-			escapeId = MYSQL.escapeId,
 			rtn = [];
 
 		Each(this, (key, val) => {
@@ -1181,12 +1180,6 @@ function QUERY(query) {
 		return rtn.join(", ");
 	}
 ].Extend(QUERY);
-
-[		
-	function SQLfind( val ) {
-		return ( val.indexOf("%")>=0) ? `${this} LIKE ${val} `  : `${this} = ${val} ` 
-	}
-].Extend(String);
 
 //=============== query/fetch serialization
 
