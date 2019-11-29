@@ -939,9 +939,7 @@ function runQuery(ctx, emitter, cb) {
 	}
 	
 	function Select(index) {
-
 		var
-			from = reroute( opts.from, opts ),
 			ex = MYSQL.format(`SELECT SQL_CALC_FOUND_ROWS ${index} FROM ??`, from);
 
 		if ( join = opts.join )
@@ -983,7 +981,6 @@ function runQuery(ctx, emitter, cb) {
 	
 	function Update() {
 		var
-			from = reroute( opts.from, opts ),			
 			ex = MYSQL.format("UPDATE ??" , from);
 
 			if ( set = opts.set )
@@ -1000,7 +997,6 @@ function runQuery(ctx, emitter, cb) {
 	
 	function Delete() {
 		var
-			from = reroute( opts.from, opts ),						
 			ex = MYSQL.format("DELETE FROM ??" , from);
 
 		if ( where = whereify(opts.where) )
@@ -1014,7 +1010,6 @@ function runQuery(ctx, emitter, cb) {
 	
 	function Insert() {
 		var 
-			from = reroute( opts.from, opts ),						
 			ex = MYSQL.format("INSERT INTO ??" , from),
 			set = opts.set || {};
 		
@@ -1029,9 +1024,54 @@ function runQuery(ctx, emitter, cb) {
 		return ex;
 	}		
 
+	function indexify(query, cb) {
+		function fix( key, escape ) {
+			return key.binop( /(.*)(\$)(.*)/, key => escape(key), (lhs,rhs,op) => {
+				if (lhs) {
+					var idx = rhs.split(",");
+					idx.forEach( (key,n) => idx[n] = escape(op+key) );
+					return `json_extract(${escapeId(lhs)}, ${idx.join(",")} )`;
+				}
+
+				else
+					return escapeId(rhs);
+			});
+		}
+
+		var 
+			takes = [],
+			skips = [];
+		
+		for ( var lhs in query ) {
+			if ( rhs = query[lhs] ) 
+				takes.push( fix(rhs,escape) + " AS " + lhs );
+			
+			else
+			if ( lhs.indexOf("%")>=0 )
+				skips.push( lhs );
+		
+			else
+				takes.push( lhs );
+		}
+
+		if ( skips.length ) {
+			skips.forEach( (skip,n) => skips[n] = "Field NOT LIKE " + escape(skip) );
+
+			sql.query( "SHOW FIELDS FROM ?? WHERE "+skips.join(" AND "), from, (err,recs) => {
+				recs.forEach( rec => takes.push( rec.Field ) );
+				cb( takes.join(",") || "*" );
+			});
+		}
+			
+		else
+			cb( takes.join(",") || "*" );
+	}
+
+	
 	var
 		sql = this,
-		opts = ctx;
+		opts = ctx,
+		from = reroute( opts.from, opts );			 
 	
 	switch ( opts.crud ) {
 		case "select":
@@ -1102,27 +1142,7 @@ function runQuery(ctx, emitter, cb) {
 				});
 			}
 
-
-			if ( except = opts.except ) {
-				var 
-					from = reroute( opts.from, opts ),				
-					bans = except.split(","),
-					index = [];
-				
-				bans.forEach( (ban,n) => bans[n] = "Field NOT LIKE " + escape(ban) );
-	
-				sql.query( "SHOW FIELDS FROM ?? WHERE "+bans.join(" AND "), from, (err,recs) => {
-					recs.forEach( rec => index.push( rec.Field ) );
-					run( Select( index.join(",") ) );
-				});
-			}
-
-			else
-			if ( index = indexify(opts.index) )
-				run( Select( index ) );
-
-			else
-				run( Select( "*" ) );
+			indexify( opts.index, index => run( Select( index ) ) );
 
 			break;
 
@@ -1206,38 +1226,6 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 }
 
 //================ url query expressions 
-
-function indexify(query) {
-	function fix( key, escape ) {
-		return key.binop( /(.*)(\$)(.*)/, key => escape(key), (lhs,rhs,op) => {
-			if (lhs) {
-				var idx = rhs.split(",");
-				idx.forEach( (key,n) => idx[n] = escape(op+key) );
-				return `json_extract(${escapeId(lhs)}, ${idx.join(",")} )`;
-			}
-
-			else
-				return escapeId(rhs);
-		});
-	}
-	
-	if ( isString(query) ) {
-		var keys = query.split(",");
-		keys.forEach( (key,n) => keys[n] = escapeId(key) );
-		return keys.join(",");
-	}
-	
-	else {
-		var ex = [];
-		for ( var lhs in query ) {
-			var rhs = fix( query[lhs] , escape );
-			ex.push( (rhs==lhs) ? rhs : `${rhs} AS ${lhs}` );
-		}
-
-		//Log(">>>index", ex);
-		return ex.join(",");
-	}
-}
 
 function whereify(query) {
 	function proc( parms, op ) {
