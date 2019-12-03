@@ -1260,13 +1260,13 @@ function whereify(query) {
 			
 			else
 				switch ( op ) {
-					case ":bin:":
+					case "!bin=":
 						ex.push( `MATCH(${lhs}) AGAINST( '${rhs}' IN BOOLEAN MODE)` );
 						break;
-					case ":exp:":
+					case "!exp=":
 						ex.push( `MATCH(${lhs}) AGAINST( '${rhs}' IN QUERY EXPANSION)` );
 						break;
-					case ":nlp:":
+					case "!nlp=":
 						ex.push( `MATCH(${lhs}) AGAINST( '${rhs}' IN NATURAL LANGUAGE MODE)` );
 						break;
 					default:
@@ -1275,6 +1275,7 @@ function whereify(query) {
 		}
 	}
 	
+	//Log("whereify",query);
 	var ex = [];
 	for ( var op in query ) 
 		proc( query[op], op );
