@@ -636,26 +636,31 @@ but not to the regulator.  Queues are periodically monitored to store billing in
 			//Log("insert job", job,err,info);
 			
 			if (err) 
-				return Log(err);
+				cb( null ); 	// signal error
 			
-			job.ID = info.insertId || 0;
-			
-			if ( job.credit )				// client still has credit so place it in the regulator
-				regulate( Copy(job,{}) , job => { // clone job and provide a callback when job departs
-					sqlThread( sql => {  // start new sql thread to run job and save metrics
-						cb( sql, job );
+			else {
+				job.ID = info.insertId || 0;
 
-						sql.query( // reduce work backlog 
-							"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", 
-							{ID: job.ID} 
-						);
-	
-						sql.query( // charge client
-							"UPDATE openv.profiles SET Charge=Charge+1,Credit=Credit-1 WHERE ?", 
-							{Client: job.client} 
-						);
+				if ( job.credit )				// client still has credit so place it in the regulator
+					regulate( Copy(job,{}) , job => { // clone job and provide a callback when job departs
+						sqlThread( sql => {  // start new sql thread to run job and save metrics
+							cb( sql, job );
+
+							sql.query( // reduce work backlog 
+								"UPDATE app.queues SET Age=now()-Arrived,Done=Done+1,State=Done/Work*100 WHERE ?", 
+								{ID: job.ID} 
+							);
+
+							sql.query( // charge client
+								"UPDATE openv.profiles SET Charge=Charge+1,Credit=Credit-1 WHERE ?", 
+								{Client: job.client} 
+							);
+						});
 					});
-				});
+				
+				else
+					cb(null); 	// signal error
+			}
 		});
 
 	else  { // unregulated so callback on existing sql thread
@@ -770,32 +775,30 @@ function flattenCatalog(flags, catalog, limits, cb) {
 
 //================= record enumerators
 
-function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) if error
+function forFirst(msg, query, args, cb) {  // callback cb(rec) or cb(null) on error
 	var q = this.query( query || "#ignore", args, (err,recs) => {  
 		if ( err ) 
-			Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` );
-		else 
+			cb( null );
+		
+		else
 			cb( recs[0] || null );
 	});
 	if (msg) Trace( `${msg} ${q.sql}`, this);	
 	return q;
 }
 
-function forEach(msg, query, args, cb) { // callback cb(rec) with each rec
-	q = this.query( query || "#ignore", args)
-	.on("error", err => Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` ) )
-	.on("result", (rec) => {
-		cb(rec);
-	});
+function forEach(msg, query, args, cb) { // callback cb(rec) with each rec - no cb if errror
+	q = this.query( query || "#ignore", args).on("result", rec => cb(rec) );
 	if (msg) Trace( `${msg} ${q.sql}`, this);	
 	return q;
 }
 
-function forAll(msg, query, args, cb) { // callback cb(recs) if no error
+function forAll(msg, query, args, cb) { // callback cb(recs) of cb(null) on error
 	var q = this.query( query || "#ignore", args, (err,recs) => {
-		if (err) 
-			Trace( `ERROR ${this.name} ${q.sql} ... ${err+""}` );
-		else 
+		if ( err ) 
+			cb( null );
+		
+		else
 			cb( recs );
 	});
 	if (msg) Trace( `${msg} ${q.sql}`, this);	
@@ -866,35 +869,19 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 }
 
 function sqlEach(trace, query, args, cb) {
-	sqlThread( sql => {
-		sql.forEach( trace, query, args, rec => {
-			cb(rec, sql);
-		});
-	});
+	sqlThread( sql => sql.forEach( trace, query, args, rec => cb(rec, sql) ) );
 }
 
 function sqlAll(trace, query, args, cb) {
-	sqlThread( sql => {
-		sql.forAll( trace, query, args, recs => {
-			cb(recs, sql);
-		});
-	});
+	sqlThread( sql => sql.forAll( trace, query, args, recs => cb(recs, sql) ) );
 }
 
 function sqlFirst(trace, query, args, cb) {
-	sqlThread( sql => {
-		sql.forFirst(trace, query, args, rec => {
-			cb(rec, sql);
-		});
-	});
+	sqlThread( sql => sql.forFirst(trace, query, args, rec => cb(rec, sql) ) );
 }
 
 function sqlContext(ctx, cb) {
-	sqlThread( sql => {
-		sql.context( ctx, function (dsctx) {
-			cb(dsctx, sql);
-		});
-	});
+	sqlThread( sql => sql.context( ctx, dsctx => cb(dsctx, sql) ) );
 }
 
 //================== db journalling
@@ -906,7 +893,7 @@ function runQuery(ctx, emitter, cb) {
 				
 		if ( ctx.lock ) {		// process form lock/unlock queries
 			sql.ctx = ctx;
-			sql.relock( function () {  // sucessfully unlocked
+			sql.relock( () => {  // sucessfully unlocked
 				switch (ctx.crud) {
 					case "select": break;
 					case "delete": 	sql.ds = null; break;
@@ -914,7 +901,7 @@ function runQuery(ctx, emitter, cb) {
 					case "insert":	sql.ds = [ctx.set]; break;
 				}
 				cb( sql.ctx.err, null );
-			}, function () {  // sucessfully locked
+			}, () => {  // sucessfully locked
 				cb( sql.ctx.err, null );
 				//res( rec );
 			});
@@ -922,19 +909,18 @@ function runQuery(ctx, emitter, cb) {
 
 		else	// process standard queries
 			sql.query( ex, [], (err, info) => {
-
 				cb( err, info );
 				
-				if ( emitter && !err && ctx.client ) { // Notify other clients of change
-					//Log("emitting", ctx);
-					emitter( ctx.crud, {
-						path: "/"+ctx.from+".db", 
-						body: ctx.set, 
-						ID: ctx.where.ID, 
-						from: ctx.client
-					});	
-				}
-
+				if ( !err )
+					if ( emitter && ctx.client ) { // Notify other clients of change
+						Log("emitting", ctx);
+						emitter( ctx.crud, {
+							path: "/"+ctx.from+".db", 
+							body: ctx.set, 
+							ID: ctx.where.ID, 
+							from: ctx.client
+						});	
+					}
 			});
 	}
 	
@@ -1067,7 +1053,6 @@ function runQuery(ctx, emitter, cb) {
 			cb( takes.join(",") || "*" );
 	}
 
-	
 	var
 		sql = this,
 		opts = ctx,
