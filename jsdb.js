@@ -54,7 +54,7 @@ var DB = module.exports = {
 					getTexts,
 
 					// query processing
-					runQuery,
+					Query,
 
 					// record enumerators
 					relock,
@@ -118,11 +118,7 @@ var DB = module.exports = {
 									ctx.crud = "select";
 									switch (req.name) {
 										case "each":
-											return sql.runQuery( ctx, null, (err,recs) => {
-												recs.forEach( rec => {
-													req(rec, me);
-												});
-											});
+											return sql.Query( ctx, null, (err,recs) => recs.forEach( rec => req(rec, me) ) );
 
 										case "clone":
 										case "trace":
@@ -130,9 +126,7 @@ var DB = module.exports = {
 
 										case "all":
 										default:
-											return sql.runQuery( ctx, null, (err,recs) => {
-												req(recs, me);
-											});				
+											return sql.Query( ctx, null, (err,recs) => req(recs, me) );				
 									}
 									break;
 
@@ -140,7 +134,7 @@ var DB = module.exports = {
 									ctx.crud = "insert";
 									req.forEach( rec => {
 										ctx.set = rec;
-										sql.runQuery( ctx, null, (err,info) => {
+										sql.Query( ctx, null, (err,info) => {
 											ctx.err = err;
 										});
 									});	
@@ -150,7 +144,7 @@ var DB = module.exports = {
 									ctx.crud = "update";
 									ctx.set = req;
 									if ( query.ID ) 
-										sql.runQuery( ctx, null, (err,info) => {
+										sql.Query( ctx, null, (err,info) => {
 											ctx.err = err;
 										});
 									break;
@@ -158,7 +152,7 @@ var DB = module.exports = {
 								case Number:  // delete
 									if ( query.ID ) {
 										ctx.crud = "delete";
-										sql.runQuery( ctx, null, (err,info) => {
+										sql.Query( ctx, null, (err,info) => {
 											ctx.err = err;
 										});
 									}
@@ -886,11 +880,11 @@ function sqlContext(ctx, cb) {
 
 //================== db journalling
 
-function runQuery(ctx, emitter, cb) {
+function Query(ctx, emitter, cb) {
 	
-	function run(ex) {
+	function run(ex,cb) {
 		if (true || opts.trace) Trace(ex);
-				
+
 		if ( ctx.lock ) {		// process form lock/unlock queries
 			sql.ctx = ctx;
 			sql.relock( () => {  // sucessfully unlocked
@@ -900,6 +894,7 @@ function runQuery(ctx, emitter, cb) {
 					case "update":	sql.ds = ctx.set; break;
 					case "insert":	sql.ds = [ctx.set]; break;
 				}
+				
 				cb( sql.ctx.err, null );
 			}, () => {  // sucessfully locked
 				cb( sql.ctx.err, null );
@@ -908,9 +903,9 @@ function runQuery(ctx, emitter, cb) {
 		}
 
 		else	// process standard queries
-			sql.query( ex, [], (err, info) => {
-				cb( err, info );
-				
+			sql.query( ex, [], (err, recs) => {
+				cb( err, recs );
+
 				if ( !err )
 					if ( emitter && ctx.client ) { // Notify other clients of change
 						Log("emitting", ctx);
@@ -1010,13 +1005,13 @@ function runQuery(ctx, emitter, cb) {
 		return ex;
 	}		
 
-	function indexify(query, cb) {
+	function indexify(query, cb) {	// callback cb( "index list", [store, ...] )
 		function fix( key, escape ) {
 			return key.binop( /(.*)(\$)(.*)/, key => escapeId(key), (lhs,rhs,op) => {
 				if (lhs) {
 					var idx = rhs.split(",");
 					idx.forEach( (key,n) => idx[n] = escape(op+key) );
-					return `json_extract(${escapeId(lhs)}, ${idx.join(",")} )`;
+					return `json_extract( ${escapeId(lhs)}, ${idx.join(",")} )`;
 				}
 
 				else
@@ -1026,37 +1021,37 @@ function runQuery(ctx, emitter, cb) {
 
 		var 
 			takes = [],
-			skips = [];
+			drops = [];
 		
 		for ( var lhs in query ) {
 			if ( rhs = query[lhs] ) 
-				takes.push( fix(rhs,escape) + " AS " + lhs );
+				takes.push( fix(rhs,escape,lhs) + " AS " + lhs );
 			
 			else
-			if ( lhs.indexOf("%")>=0 )
+			if ( lhs.indexOf("%") >= 0 )
 				skips.push( lhs );
 		
 			else
 				takes.push( lhs );
 		}
 
-		if ( skips.length ) {
-			skips.forEach( (skip,n) => skips[n] = "Field NOT LIKE " + escape(skip) );
+		if ( drops.length ) {	// drop specified fields 
+			drops.forEach( (skip,n) => drops[n] = "Field NOT LIKE " + escape(skip) );
 
-			sql.query( "SHOW FIELDS FROM ?? WHERE "+skips.join(" AND "), from, (err,recs) => {
+			sql.query( "SHOW FIELDS FROM ?? WHERE "+drops.join(" AND "), from, (err,recs) => {
 				recs.forEach( rec => takes.push( rec.Field ) );
 				cb( takes.join(",") || "*" );
 			});
 		}
-			
-		else
+
+		else	// table all specified fields
 			cb( takes.join(",") || "*" );
 	}
 
 	var
 		sql = this,
 		opts = ctx,
-		from = reroute( opts.from, opts );			 
+		from = reroute( opts.from, opts );	
 	
 	switch ( opts.crud ) {
 		case "select":
@@ -1127,20 +1122,33 @@ function runQuery(ctx, emitter, cb) {
 				});
 			}
 
-			indexify( opts.index, index => run( Select( index ) ) );
+			indexify( opts.index, index => run( Select( index ), (err,recs) => {
+				if ( recs ) 
+					recs.forEach( rec => {
+						for (var key in rec) {
+							try {
+								rec[key] = JSON.parse( rec[key] );
+							}
+							catch (err) {
+							}
+						}
+					});
+				
+				cb( err, recs );
+			}) );
 
 			break;
 
 		case "update":
-			run( Update() );
+			run( Update(), cb );
 			break;
 
 		case "delete":
-			run( Delete() );
+			run( Delete(), cb );
 			break;
 
 		case "insert":
-			run( Insert() );
+			run( Insert(), cb );
 			break;
 	}
 
