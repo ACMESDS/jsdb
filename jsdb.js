@@ -1012,7 +1012,7 @@ function runQuery(ctx, emitter, cb) {
 
 	function indexify(query, cb) {
 		function fix( key, escape ) {
-			return key.binop( /(.*)(\$)(.*)/, key => escape(key), (lhs,rhs,op) => {
+			return key.binop( /(.*)(\$)(.*)/, key => escapeId(key), (lhs,rhs,op) => {
 				if (lhs) {
 					var idx = rhs.split(",");
 					idx.forEach( (key,n) => idx[n] = escape(op+key) );
@@ -1227,10 +1227,14 @@ function whereify(query) {
 			});
 		}
 		
+		var
+			lhsEscape = escapeId,
+			rhsEscape = escape;
+		
 		for ( var key in parms ) {
 			var 
-				lhs = fix( key, escapeId ),
-				rhs = fix( parms[key], escape );
+				lhs = fix( key, lhsEscape ),
+				rhs = fix( parms[key], rhsEscape );
 
 			if ( rhs.indexOf("%") >= 0 ) 
 				switch (op) {
