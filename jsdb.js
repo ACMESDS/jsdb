@@ -1029,7 +1029,7 @@ function Query(ctx, emitter, cb) {
 			
 			else
 			if ( lhs.indexOf("%") >= 0 )
-				skips.push( lhs );
+				drops.push( lhs );
 		
 			else
 				takes.push( lhs );
@@ -1122,20 +1122,7 @@ function Query(ctx, emitter, cb) {
 				});
 			}
 
-			indexify( opts.index, index => run( Select( index ), (err,recs) => {
-				if ( recs ) 
-					recs.forEach( rec => {
-						for (var key in rec) {
-							try {
-								rec[key] = JSON.parse( rec[key] );
-							}
-							catch (err) {
-							}
-						}
-					});
-				
-				cb( err, recs );
-			}) );
+			indexify( opts.index, index => run( Select( index ), cb ) );
 
 			break;
 
