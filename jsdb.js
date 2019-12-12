@@ -1007,11 +1007,11 @@ function Query(ctx, emitter, cb) {
 
 	function indexify(query, cb) {	// callback cb( "index list", [store, ...] )
 		function fix( key, escape ) {
-			return key.binop( /(.*)(\$)(.*)/, key => escapeId(key), (lhs,rhs,op) => {
+			return key.binop( /(.*?)(\$)(.*)/, key => escapeId(key), (lhs,rhs,op) => {
 				if (lhs) {
 					var idx = rhs.split(",");
-					idx.forEach( (key,n) => idx[n] = escape(op+key) );
-					return `json_extract( ${escapeId(lhs)}, ${idx.join(",")} )`;
+					idx.forEach( (key,n) => idx[n] = escape( n ? key : op+key) );
+					return `json_extract(${escapeId(lhs)}, ${idx.join(",")} )`;
 				}
 
 				else
@@ -1210,10 +1210,10 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 function whereify(query) {
 	function proc( parms, op ) {
 		function fix( key, escape ) {
-			return key.binop( /(.*)(\$)(.*)/, key => escape(key), (lhs,rhs,op) => {
+			return key.binop( /(.*?)(\$)(.*)/, key => escape(key), (lhs,rhs,op) => {
 				if (lhs) {
 					var idx = rhs.split(",");
-					idx.forEach( (key,n) => idx[n] = escape(op+key) );
+					idx.forEach( (key,n) => idx[n] = escape( n ? key : op+key) );
 					return `json_extract(${escapeId(lhs)}, ${idx.join(",")} )`;
 				}
 				
