@@ -1006,12 +1006,23 @@ function Query(ctx, emitter, cb) {
 	}		
 
 	function indexify(query, cb) {	// callback cb( "index list", [store, ...] )
-		function fix( key, escape ) {
+		function fix( key, escape, json ) {
 			return key.binop( /(.*?)(\$)(.*)/, key => escapeId(key), (lhs,rhs,op) => {
 				if (lhs) {
-					var idx = rhs.split(",");
-					idx.forEach( (key,n) => idx[n] = escape( n ? key : op+key) );
-					return `json_extract(${escapeId(lhs)}, ${idx.join(",")} )`;
+					jsons.push( json );
+					
+					var 
+						keys = rhs.split(","),
+						idx = [];
+					
+					keys.forEach( (key,n) => { 
+						if ( key )
+							idx.push( escape( n ? key : op+key) );
+					});
+						
+					return idx.length 
+						? `json_extract(${escapeId(lhs)}, ${idx.join(",")} )`
+						: escapeId(lhs);
 				}
 
 				else
@@ -1020,6 +1031,7 @@ function Query(ctx, emitter, cb) {
 		}
 
 		var 
+			jsons = [],
 			takes = [],
 			drops = [];
 		
@@ -1040,12 +1052,12 @@ function Query(ctx, emitter, cb) {
 
 			sql.query( "SHOW FIELDS FROM ?? WHERE "+drops.join(" AND "), from, (err,recs) => {
 				recs.forEach( rec => takes.push( rec.Field ) );
-				cb( takes.join(",") || "*" );
+				cb( takes.join(",") || "*", jsons );
 			});
 		}
 
 		else	// table all specified fields
-			cb( takes.join(",") || "*" );
+			cb( takes.join(",") || "*", jsons );
 	}
 
 	var
@@ -1122,7 +1134,16 @@ function Query(ctx, emitter, cb) {
 				});
 			}
 
-			indexify( opts.index, index => run( Select( index ), cb ) );
+			indexify( opts.index, (index,jsons) => run( Select( index ), (err,recs) => {
+				if (!err) 
+					jsons.forEach( key => {
+						recs.forEach( rec => {
+							rec[key] = JSON.parse( rec[key] );
+						});
+					});
+
+				cb( err, recs );
+			}) );
 
 			break;
 
