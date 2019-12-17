@@ -1007,7 +1007,7 @@ function Query(ctx, emitter, cb) {
 
 	function indexify(query, cb) {	// callback cb( "index list", [store, ...] )
 		function fix( key, escape, json ) {
-			return key.binop( /(.*?)(\$)(.*)/, key => escapeId(key), (lhs,rhs,op) => {
+			return key.parseOP( /(.*?)(\$)(.*)/, key => escapeId(key), (lhs,rhs,op) => {
 				if (lhs) {
 					jsons.push( json );
 					
@@ -1231,7 +1231,7 @@ function relock(unlockcb, lockcb) {  //< lock-unlock record during form entry
 function whereify(query) {
 	function proc( parms, op ) {
 		function fix( key, escape ) {
-			return key.binop( /(.*?)(\$)(.*)/, key => escape(key), (lhs,rhs,op) => {
+			return key.parseOP( /(.*?)(\$)(.*)/, key => escape(key), (lhs,rhs,op) => {
 				if (lhs) {
 					var idx = rhs.split(",");
 					idx.forEach( (key,n) => idx[n] = escape( n ? key : op+key) );
