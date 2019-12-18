@@ -246,12 +246,11 @@ const { mysql } = DB = module.exports = {
 		host: ENV.MYSQL_HOST || "MYSQL_HOST undefiend",
 		user: ENV.MYSQL_USER || "MYSQL_USER undefined",
 		password: ENV.MYSQL_PASS || "MYSQL_PASS undefined",
-		connectionLimit: 5e3,
-		timeout: 600e3, 		// milli-seconds
-		acquireTimeout: 600e3,
-		connectTimeout: 600e3,
+		connectionLimit: 50,	// max number to create "at once" - whatever that means
+		acquireTimeout: 600e3,	// ms timeout during connection acquisition - whatever that means
+		connectTimeout: 600e3,	// ms timeout during initial connect to mysql server
 		queueLimit: 0,  						// max concections to queue (0=unlimited)
-		waitForConnections: true,		// allow connection requests to be queued
+		waitForConnections: true,		// queue when no connections are available and limit reached
 		
 		// reserved for ...
 		threads: 0, 	// connection threads
