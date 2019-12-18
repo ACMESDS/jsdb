@@ -8,6 +8,9 @@
 */
 
 var	
+	// globals
+	ENV = process.env,
+	
 	// nodejs modules
 	CLUSTER = require("cluster"),
 
@@ -21,184 +24,176 @@ function Trace(msg,req,fwd) {	//< execution tracing
 const { Copy,Each,Log,isFunction,isString,isArray,isEmpty,isDate } = require("enum");
 const { escape, escapeId } = MYSQL;
 
-var DB = module.exports = {
+const { mysql } = DB = module.exports = {
 	config: (opts,cb) => {  // callback cb(sql connection)
 		if (opts) Copy(opts,DB,".");
 
 		//Trace("CONFIG DB");
 
-		if (mysql = DB.mysql) {		// create pooled connection.
-			/*
-				mysql.connection = MYSQL.createConnection(mysql.opts);
-				mysql.connection.connect();
-				// nonpooled connector permits connection reuse within other queries, but they become responsible to release() the connection
-			*/
-			
-			var pool = mysql.pool = MYSQL.createPool(mysql.opts);
-			
-			// may be useful to test thread depth to protect against DOS attacks
-			pool.on("acquire", () => DB.threads ++ );
-			pool.on("release", () => DB.threads -- );
-			
-			sqlThread( sql => {
+		/*
+			mysql.connection = MYSQL.createConnection(mysql.opts);
+			mysql.connection.connect();
+			// nonpooled connector permits connection reuse within other queries, but they become responsible to release() the connection
+		*/
 
-				[						
-					// key getters
-					getKeys,
-					//getTypes,
-					getFields,
-					getTables,
-					getJsons,
-					getSearchables,
-					getGeometries,
-					getTexts,
+		var pool = mysql.pool = MYSQL.createPool(mysql);
 
-					// query processing
-					Query,
+		// may be useful to test thread depth to protect against DOS attacks
+		pool.on("acquire", () => mysql.threads ++ );
+		pool.on("release", () => mysql.threads -- );
 
-					// record enumerators
-					relock,
-					forFirst,
-					forEach,
-					forAll,
-					//thenDo,
-					//onEnd,
-					//onError,
+		sqlThread( sql => {
 
-					// misc
-					reroute,
-					serialize,
-					context,
-					cache,
-					hawk,
-					flattenCatalog,
+			[						
+				// key getters
+				getKeys,
+				//getTypes,
+				getFields,
+				getTables,
+				getJsons,
+				getSearchables,
+				getGeometries,
+				getTexts,
 
-					/*
-					//escapeing,
-					function escape(arg) { return MYSQL.escape(arg); },
-					function escapeId(key) { return MYSQL.escapeId(key); }, 
-					*/
-					
-					// bulk insert records
-					beginBulk,
-					endBulk,
+				// query processing
+				Query,
 
-					// job processing
-					selectJob,
-					deleteJob,
-					updateJob,
-					insertJob,
-					executeJob						
-				].Extend(sql.constructor);
+				// record enumerators
+				relock,
+				forFirst,
+				forEach,
+				forAll,
+				//thenDo,
+				//onEnd,
+				//onError,
 
-				sql.query("DELETE FROM openv.locks");
+				// misc
+				reroute,
+				serialize,
+				context,
+				cache,
+				hawk,
+				flattenCatalog,
 
-				Object.defineProperties( sql.constructor.prototype, {
-					ctx: {
-						get: function () { 
-							return this._ctx; 
-						},
-						set: function (ctx) { 
-							//Log("sql set>>>>>>>>>>>", ctx); 
-							this._ctx = ctx;
-						}
+				/*
+				//escapeing,
+				function escape(arg) { return MYSQL.escape(arg); },
+				function escapeId(key) { return MYSQL.escapeId(key); }, 
+				*/
+
+				// bulk insert records
+				beginBulk,
+				endBulk,
+
+				// job processing
+				selectJob,
+				deleteJob,
+				updateJob,
+				insertJob,
+				executeJob						
+			].Extend(sql.constructor);
+
+			sql.query("DELETE FROM openv.locks");
+
+			Object.defineProperties( sql.constructor.prototype, {
+				ctx: {
+					get: function () { 
+						return this._ctx; 
 					},
-					ds: {
-						get: function () {
-							return this._ctx.err;
-						},
-						set: function (req) {
-							var 
-								ctx = this._ctx,
-								sql = this,
-								query = ctx.where;
+					set: function (ctx) { 
+						//Log("sql set>>>>>>>>>>>", ctx); 
+						this._ctx = ctx;
+					}
+				},
+				ds: {
+					get: function () {
+						return this._ctx.err;
+					},
+					set: function (req) {
+						var 
+							ctx = this._ctx,
+							sql = this,
+							query = ctx.where;
 
-							switch ((req||0).constructor) {
-								case Function:  // select
-									ctx.crud = "select";
-									switch (req.name) {
-										case "each":
-											return sql.Query( ctx, null, (err,recs) => recs.forEach( rec => req(rec, me) ) );
+						switch ((req||0).constructor) {
+							case Function:  // select
+								ctx.crud = "select";
+								switch (req.name) {
+									case "each":
+										return sql.Query( ctx, null, (err,recs) => recs.forEach( rec => req(rec, me) ) );
 
-										case "clone":
-										case "trace":
-											return;
+									case "clone":
+									case "trace":
+										return;
 
-										case "all":
-										default:
-											return sql.Query( ctx, null, (err,recs) => req(recs, me) );				
-									}
-									break;
+									case "all":
+									default:
+										return sql.Query( ctx, null, (err,recs) => req(recs, me) );				
+								}
+								break;
 
-								case Array:		// insert
-									ctx.crud = "insert";
-									req.forEach( rec => {
-										ctx.set = rec;
-										sql.Query( ctx, null, (err,info) => {
-											ctx.err = err;
-										});
-									});	
-									break;
-
-								case Object:		// update
-									ctx.crud = "update";
-									ctx.set = req;
-									if ( query.ID ) 
-										sql.Query( ctx, null, (err,info) => {
-											ctx.err = err;
-										});
-									break;
-
-								case Number:  // delete
-									if ( query.ID ) {
-										ctx.crud = "delete";
-										sql.Query( ctx, null, (err,info) => {
-											ctx.err = err;
-										});
-									}
-									break;
-
-								case String:		// locking / unlocking
-									sql.relock( () => {  // unlocked
-										switch (req) {
-											case "select": break;
-											case "delete": 	sql.ds = null; break;
-											case "update":	sql.ds = ctx.set; break;
-											case "insert":	sql.ds = [ctx.set]; break;
-										}
-
-									}, () => {  // locked
-										//res( rec );
+							case Array:		// insert
+								ctx.crud = "insert";
+								req.forEach( rec => {
+									ctx.set = rec;
+									sql.Query( ctx, null, (err,info) => {
+										ctx.err = err;
 									});
-									break;
-							}
+								});	
+								break;
+
+							case Object:		// update
+								ctx.crud = "update";
+								ctx.set = req;
+								if ( query.ID ) 
+									sql.Query( ctx, null, (err,info) => {
+										ctx.err = err;
+									});
+								break;
+
+							case Number:  // delete
+								if ( query.ID ) {
+									ctx.crud = "delete";
+									sql.Query( ctx, null, (err,info) => {
+										ctx.err = err;
+									});
+								}
+								break;
+
+							case String:		// locking / unlocking
+								sql.relock( () => {  // unlocked
+									switch (req) {
+										case "select": break;
+										case "delete": 	sql.ds = null; break;
+										case "update":	sql.ds = ctx.set; break;
+										case "insert":	sql.ds = [ctx.set]; break;
+									}
+
+								}, () => {  // locked
+									//res( rec );
+								});
+								break;
 						}
 					}
-				}); 
+				}
+			}); 
 
-				var 
-					attrs = DB.attrs,
-					dsFrom = "app",
-					dsKey = "Tables_in_" + dsFrom;
+			var 
+				attrs = DB.attrs;
 
-				sql.query(`SHOW TABLES FROM ${dsFrom}`, (err,recs) => {
-					recs.forEach( rec => {
-						sql.getSearchables( ds = dsFrom + "." + rec[dsKey], keys => {
-							var attr = attrs[ds] = {};
-							for (var key in attrs.default) attr[key] = attrs.default[key];
-							attr.search = keys.join(",");
-						});
+			sql.query(`SHOW TABLES FROM app`, (err,recs) => {
+				recs.forEach( rec => {
+					sql.getSearchables( ds = "app." + rec.Tables_in_app, keys => {
+						var attr = attrs[ds] = {};
+						for (var key in attrs.default) attr[key] = attrs.default[key];
+						attr.search = keys.join(",");
 					});
-
-					if (cb) cb(null);						
 				});
 
+				if (cb) cb(null);						
 			});
-		}
 
-		else 
-		if (cb)
-			cb( new DB.errors.noDB );
+		});
 	},
 	
 	queues: { 	//< reserve for job queues
@@ -241,9 +236,58 @@ var DB = module.exports = {
 		}		
 	},
 
-	mysql: null,  //< reserved for mysql connector
+	/**
+	@cfg {Object} 
+	@member TOTEM
+	MySQL connection options {host, user, pass, sessions} or nul l to disable
+	*/		
+	mysql: { //< connection options
+		// connection options
+		host: ENV.MYSQL_HOST || "MYSQL_HOST undefiend",
+		user: ENV.MYSQL_USER || "MYSQL_USER undefined",
+		password: ENV.MYSQL_PASS || "MYSQL_PASS undefined",
+		connectionLimit: 5e3,
+		timeout: 600e3, 		// milli-seconds
+		acquireTimeout: 600e3,
+		connectTimeout: 600e3,
+		queueLimit: 0,  						// max concections to queue (0=unlimited)
+		waitForConnections: true,		// allow connection requests to be queued
+		
+		// reserved for ...
+		threads: 0, 	// connection threads
+		pool: null		// connector
+		/*
+		function dummyConnector() {
+			var
+				This = this,
+				err = DB.errors.noDB;
 
-	threads: 0, 	// connection threads
+			this.query = function (q,args,cb) {
+				Trace("NODB "+q);
+				if (cb)
+					cb(err);
+				else
+				if ( args && isFunction(args) )
+					args(err);
+
+				return This;
+			};
+
+			this.on = function (ev, cb) {
+				return This;
+			};
+
+			this.sql = "DUMMY SQL CONNECTOR";
+
+			this.release = function () {
+				return This;
+			};
+
+			this.createPool = function (opts) {
+				return null;
+			};
+		} */		
+	},
 	
 	//emitter: null,  //< reserved for socketio emitter
 
@@ -800,8 +844,7 @@ function forAll(msg, query, args, cb) { // callback cb(recs) of cb(null) on erro
 }
 
 function sqlThread(cb) {  // callback cb(sql) with a sql connection
-	if ( mysql = DB.mysql ) 
-		cb(mysql.pool);
+	cb(mysql.pool);
 		/*
 		if ( mysql.pool ) 
 			mysql.pool.getConnection( (err,sql) => {
@@ -828,38 +871,6 @@ function sqlThread(cb) {  // callback cb(sql) with a sql connection
 		else
 			Log(DB.errors.noConnect);	
 		*/
-
-	else 
-		cb( function dummyConnector() {
-			var
-				This = this,
-				err = DB.errors.noDB;
-
-			this.query = function (q,args,cb) {
-				Trace("NODB "+q);
-				if (cb)
-					cb(err);
-				else
-				if ( args && isFunction(args) )
-					args(err);
-
-				return This;
-			};
-
-			this.on = function (ev, cb) {
-				return This;
-			};
-
-			this.sql = "DUMMY SQL CONNECTOR";
-
-			this.release = function () {
-				return This;
-			};
-
-			this.createPool = function (opts) {
-				return null;
-			};
-		} );
 }
 
 function sqlEach(trace, query, args, cb) {
