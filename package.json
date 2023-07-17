@@ -4,7 +4,7 @@
   "description": "/** @class DSVAR  \t[SourceForge](https://sourceforge.net)  \t[github](https://github.com/acmesds/jsdb.git)  \t[geointapps](https://git.geointapps.org/acmesds/jsdb) \t[gitlab](https://gitlab.weat.nga.ic.gov/acmesds/jsdb.git)",
   "main": "jsdb.js",
   "dependencies": {
-    "mysql": "^2.17.1"
+    "mysql": "^2.18.0"
   },
   "devDependencies": {},
   "scripts": {
